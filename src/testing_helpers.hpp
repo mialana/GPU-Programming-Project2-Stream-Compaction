@@ -70,6 +70,14 @@ void genArray(int n, int* a, int maxval)
     }
 }
 
+void genConsecutiveArray(int n, int* a)
+{
+    for (int i = 0; i < n; i++)
+    {
+        a[i] = i;
+    }
+}
+
 void printArray(int n, int* a, bool abridged = false)
 {
     printf("    [ ");

@@ -24,6 +24,16 @@ void scan(int n, int* odata, const int* idata)
 {
     timer().startCpuTimer();
     // TODO
+
+    odata[0] = 0;  // identity is 0
+
+    int prev_sum = idata[0]; // save prev sum for access ease
+    for (int j = 1; j < n + 1; j++)
+    {
+        odata[j] = prev_sum;
+        prev_sum += idata[j];
+    }
+    
     timer().endCpuTimer();
 }
 

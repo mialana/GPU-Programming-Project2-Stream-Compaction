@@ -13,11 +13,17 @@
 #include <stream_compaction/thrust.h>
 #include "testing_helpers.hpp"
 
+#define SKIP_UNIMPLEMENTED \
+    1  // use during development with `#if !SKIP_UNIMPLEMENTED` preprocessor at desired skip point
+
 const int SIZE = 1 << 8;    // feel free to change the size of array
 const int NPOT = SIZE - 3;  // Non-Power-Of-Two
 int* a = new int[SIZE];
 int* b = new int[SIZE];
 int* c = new int[SIZE];
+
+int* consecutive = new int[SIZE];  // use to test without randomness
+int* consecutiveOut = new int[SIZE];
 
 int main()
 {
@@ -28,6 +34,18 @@ int main()
     printf("** SCAN TESTS **\n");
     printf("****************\n");
 
+    printDesc("consecutive array (input)");
+    genConsecutiveArray(SIZE, consecutive);
+    printArray(SIZE, consecutive, true);
+
+    zeroArray(SIZE, consecutiveOut);
+    printDesc("cpu scan, power-of-two, consecutive-valued array");
+    StreamCompaction::CPU::scan(SIZE, consecutiveOut, consecutive);
+    printElapsedTime(StreamCompaction::CPU::timer().getCpuElapsedTimeForPreviousOperation(),
+                     "(std::chrono Measured)");
+    printArray(SIZE, consecutiveOut, true);
+
+    printDesc("a array (input)");
     genArray(SIZE - 1, a, 50);  // Leave a 0 at the end to test that edge case
     a[SIZE - 1] = 0;
     printArray(SIZE, a, true);
@@ -41,6 +59,8 @@ int main()
     printElapsedTime(StreamCompaction::CPU::timer().getCpuElapsedTimeForPreviousOperation(),
                      "(std::chrono Measured)");
     printArray(SIZE, b, true);
+
+#if !SKIP_UNIMPLEMENTED
 
     zeroArray(SIZE, c);
     printDesc("cpu scan, non-power-of-two");
@@ -161,8 +181,15 @@ int main()
     // printArray(count, c, true);
     printCmpLenResult(count, expectedNPOT, b, c);
 
-    system("pause");  // stop Win32 console from closing on exit
+#endif
+
+#if defined(_WIN32) || defined(_WIN64)  // errors out on linux
+    system("pause");                    // stop Win32 console from closing on exit
+#endif
+
     delete[] a;
     delete[] b;
     delete[] c;
+    delete[] consecutive;
+    delete[] consecutiveOut;
 }
