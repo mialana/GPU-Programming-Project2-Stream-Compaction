@@ -70,7 +70,7 @@ void printArray(int n, int *a, bool abridged = false) {
 }
 
 template<typename T>
-void printElapsedTime(T time, std::string note = "")
+void printElapsedTime(T time, const char* note = "")
 {
     std::cout << "   elapsed time: " << time << "ms    " << note << std::endl;
 }

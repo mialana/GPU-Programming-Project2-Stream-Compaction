@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "CUDA C++: Launch",
+      "preLaunchTask": "CMake: build",
+      "type": "cuda-gdb",
+      "request": "launch",
+      "program": "${command:cmake.launchTargetPath}",
+      "logFile": "${workspaceFolder}/log.txt",
+      "cwd": "${workspaceFolder}",
+      "environment": []
+    }
+  ]
+}

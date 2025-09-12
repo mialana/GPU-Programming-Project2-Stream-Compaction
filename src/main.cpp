@@ -19,7 +19,7 @@ int *a = new int[SIZE];
 int *b = new int[SIZE];
 int *c = new int[SIZE];
 
-int main(int argc, char* argv[]) {
+int main() {
     // Scan tests
 
     printf("\n");
