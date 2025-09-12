@@ -28,4 +28,11 @@ build:
 clean:
 	((cd build && make clean) 2>&- || true)
 
+format:
+	find src stream_compaction \
+  -type f \( -iname '*.h' -o -iname '*.hpp' -o -iname '*.cpp' -o -iname '*.cu' -o -iname '*.glsl' \) \
+  -exec clang-format -i {} +
+
+
+
 .PHONY: all Debug MinSizeRel Release RelWithDebugInfo clean
