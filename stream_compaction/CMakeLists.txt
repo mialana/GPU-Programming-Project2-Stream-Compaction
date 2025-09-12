@@ -28,5 +28,3 @@ elseif(CMAKE_VERSION VERSION_LESS "3.24.0")
 else()
     set_target_properties(stream_compaction PROPERTIES CUDA_ARCHITECTURES native)
 endif()
-
-target_compile_options(stream_compaction PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-O3>)

@@ -11,7 +11,7 @@ while true; do
 
         trash build;
         mkdir build && cd build;
-        cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS=-I/usr/local/cuda-13.0/targets/x86_64-linux/include/cccl/thrust/;
+        cmake .. -DCMAKE_BUILD_TYPE=Release";
         make -j$(nproc --all);
 
         cd $CURRENT_DIR; # cd to stored original directory 
