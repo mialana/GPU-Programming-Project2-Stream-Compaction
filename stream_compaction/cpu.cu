@@ -25,15 +25,15 @@ void scan(int n, int* odata, const int* idata)
     timer().startCpuTimer();
     // TODO
 
-    odata[0] = 0;  // identity is 0
+    odata[0] = 0;             // identity is 0
 
-    int prev_sum = idata[0]; // save prev sum for access ease
+    int prev_sum = idata[0];  // save prev sum for access ease
     for (int j = 1; j < n + 1; j++)
     {
         odata[j] = prev_sum;
         prev_sum += idata[j];
     }
-    
+
     timer().endCpuTimer();
 }
 
@@ -45,9 +45,21 @@ void scan(int n, int* odata, const int* idata)
 int compactWithoutScan(int n, int* odata, const int* idata)
 {
     timer().startCpuTimer();
-    // TODO
+
+    int outIndex = 0; // pointer to current progress in out array
+
+    for (int i = 0; i < n; i++)
+    {
+        int inVal = idata[i];
+        if (inVal != 0)
+        {
+            odata[outIndex] = inVal;
+            outIndex++;
+        }
+    }
+
     timer().endCpuTimer();
-    return -1;
+    return outIndex;
 }
 
 /**

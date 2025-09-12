@@ -90,7 +90,9 @@ void printArray(int n, int* a, bool abridged = false)
         }
         printf("%3d ", a[i]);
     }
-    printf("]\n");
+    printf("] - count: ");
+    printf("%d\n", n);
+
 }
 
 template<typename T>

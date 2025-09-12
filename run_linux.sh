@@ -9,9 +9,10 @@ while true; do
         [Yy]* )
         cd $SCRIPT_DIR; # cd to where script is located
 
-        trash build;
-        mkdir build && cd build;
-        cmake .. -DCMAKE_BUILD_TYPE=Release;
+        # trash build;
+        # mkdir build;
+        cd build;
+        # cmake .. -DCMAKE_BUILD_TYPE=Release;
         make -j$(nproc --all);
 
         cd $CURRENT_DIR; # cd to stored original directory 

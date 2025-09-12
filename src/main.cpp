@@ -13,11 +13,12 @@
 #include <stream_compaction/thrust.h>
 #include "testing_helpers.hpp"
 
-#define SKIP_UNIMPLEMENTED \
-    1  // use during development with `#if !SKIP_UNIMPLEMENTED` preprocessor at desired skip point
+// use during development with `#if !SKIP_UNIMPLEMENTED` preprocessor at desired skip point
+#define SKIP_UNIMPLEMENTED 1
 
 const int SIZE = 1 << 8;    // feel free to change the size of array
 const int NPOT = SIZE - 3;  // Non-Power-Of-Two
+
 int* a = new int[SIZE];
 int* b = new int[SIZE];
 int* c = new int[SIZE];
@@ -60,8 +61,6 @@ int main()
                      "(std::chrono Measured)");
     printArray(SIZE, b, true);
 
-#if !SKIP_UNIMPLEMENTED
-
     zeroArray(SIZE, c);
     printDesc("cpu scan, non-power-of-two");
     StreamCompaction::CPU::scan(NPOT, c, a);
@@ -69,6 +68,8 @@ int main()
                      "(std::chrono Measured)");
     printArray(NPOT, c, true);
     printCmpResult(NPOT, b, c);
+
+#if !SKIP_UNIMPLEMENTED
 
     zeroArray(SIZE, c);
     printDesc("naive scan, power-of-two");
@@ -124,6 +125,7 @@ int main()
     // printArray(NPOT, c, true);
     printCmpResult(NPOT, b, c);
 
+#endif
     printf("\n");
     printf("*****************************\n");
     printf("** STREAM COMPACTION TESTS **\n");
@@ -157,6 +159,7 @@ int main()
     printArray(count, c, true);
     printCmpLenResult(count, expectedNPOT, b, c);
 
+#if !SKIP_UNIMPLEMENTED
     zeroArray(SIZE, c);
     printDesc("cpu compact with scan");
     count = StreamCompaction::CPU::compactWithScan(SIZE, c, a);
