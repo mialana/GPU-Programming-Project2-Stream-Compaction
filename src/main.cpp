@@ -159,7 +159,6 @@ int main()
     printArray(count, c, true);
     printCmpLenResult(count, expectedNPOT, b, c);
 
-#if !SKIP_UNIMPLEMENTED
     zeroArray(SIZE, c);
     printDesc("cpu compact with scan");
     count = StreamCompaction::CPU::compactWithScan(SIZE, c, a);
@@ -167,6 +166,16 @@ int main()
                      "(std::chrono Measured)");
     printArray(count, c, true);
     printCmpLenResult(count, expectedCount, b, c);
+
+    zeroArray(SIZE, c);
+    printDesc("cpu compact with scan, non-power-of-two");
+    count = StreamCompaction::CPU::compactWithScan(NPOT, c, a);
+    printElapsedTime(StreamCompaction::CPU::timer().getCpuElapsedTimeForPreviousOperation(),
+                     "(std::chrono Measured)");
+    printArray(count, c, true);
+    printCmpLenResult(count, expectedNPOT, b, c);
+
+#if !SKIP_UNIMPLEMENTED
 
     zeroArray(SIZE, c);
     printDesc("work-efficient compact, power-of-two");

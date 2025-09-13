@@ -51,6 +51,9 @@ __global__ void kernScatter(
 class PerformanceTimer
 {
 public:
+    bool cpu_timer_started = false;
+    bool gpu_timer_started = false;
+    
     PerformanceTimer()
     {
         cudaEventCreate(&event_start);
@@ -138,9 +141,6 @@ private:
     using time_point_t = std::chrono::high_resolution_clock::time_point;
     time_point_t time_start_cpu;
     time_point_t time_end_cpu;
-
-    bool cpu_timer_started = false;
-    bool gpu_timer_started = false;
 
     float prev_elapsed_time_cpu_milliseconds = 0.f;
     float prev_elapsed_time_gpu_milliseconds = 0.f;
