@@ -21,13 +21,13 @@ int cmpArrays(int n, T* a, T* b)
 
 inline void printDesc(const char* desc)
 {
-    printf("==== %s ====\n", desc);
+    printf("\033[1;35m==== %s ====\033[0m\n", desc); // make pink
 }
 
 template<typename T>
 inline void printCmpResult(int n, T* a, T* b)
 {
-    printf("    %s \n", cmpArrays(n, a, b) ? "FAIL VALUE" : "passed");
+    printf("    %s \033[0m\n", cmpArrays(n, a, b) ? "\033[1;31mFAIL VALUE" : "\033[1;32mpassed");
 }
 
 template<typename T>

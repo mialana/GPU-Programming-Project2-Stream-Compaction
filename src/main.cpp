@@ -69,29 +69,29 @@ int main()
     printArray(NPOT, c, true);
     printCmpResult(NPOT, b, c);
 
-#if !SKIP_UNIMPLEMENTED
-
     zeroArray(SIZE, c);
     printDesc("naive scan, power-of-two");
     StreamCompaction::Naive::scan(SIZE, c, a);
     printElapsedTime(StreamCompaction::Naive::timer().getGpuElapsedTimeForPreviousOperation(),
                      "(CUDA Measured)");
-    // printArray(SIZE, c, true);
+    printArray(SIZE, c, true);
     printCmpResult(SIZE, b, c);
 
-    /* For bug-finding only: Array of 1s to help find bugs in stream compaction or scan
+    // For bug-finding only: Array of 1s to help find bugs in stream compaction or scan
     onesArray(SIZE, c);
     printDesc("1s array for finding bugs");
     StreamCompaction::Naive::scan(SIZE, c, a);
-    printArray(SIZE, c, true); */
+    printArray(SIZE, c, true);
 
     zeroArray(SIZE, c);
     printDesc("naive scan, non-power-of-two");
     StreamCompaction::Naive::scan(NPOT, c, a);
     printElapsedTime(StreamCompaction::Naive::timer().getGpuElapsedTimeForPreviousOperation(),
                      "(CUDA Measured)");
-    // printArray(SIZE, c, true);
+    printArray(SIZE, c, true);
     printCmpResult(NPOT, b, c);
+
+#if !SKIP_UNIMPLEMENTED
 
     zeroArray(SIZE, c);
     printDesc("work-efficient scan, power-of-two");
@@ -126,6 +126,8 @@ int main()
     printCmpResult(NPOT, b, c);
 
 #endif
+
+#if !SKIP_UNIMPLEMENTED
     printf("\n");
     printf("*****************************\n");
     printf("** STREAM COMPACTION TESTS **\n");
@@ -174,8 +176,6 @@ int main()
                      "(std::chrono Measured)");
     printArray(count, c, true);
     printCmpLenResult(count, expectedNPOT, b, c);
-
-#if !SKIP_UNIMPLEMENTED
 
     zeroArray(SIZE, c);
     printDesc("work-efficient compact, power-of-two");

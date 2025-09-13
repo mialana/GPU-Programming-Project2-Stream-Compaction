@@ -11,10 +11,17 @@
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #define checkCUDAError(msg) checkCUDAErrorFn(msg, FILENAME, __LINE__)
 
+#define BLOCK_SIZE 32
+
 /**
  * Check for CUDA errors; print and exit if there was a problem.
  */
 void checkCUDAErrorFn(const char* msg, const char* file = NULL, int line = -1);
+
+inline unsigned divup(unsigned size, unsigned div)
+{
+    return (size + div - 1) / div;
+}
 
 inline int ilog2(int x)
 {
@@ -39,6 +46,10 @@ __global__ void kernMapToBoolean(int n, int* bools, const int* idata);
 
 __global__ void kernScatter(
     int n, int* odata, const int* idata, const int* bools, const int* indices);
+
+__global__ void kernel_inclusiveToExclusive(int n, int identity, const int* iData, int* oData);
+
+__global__ void kernel_copyData(int n, const int* iData, int* oData);
 
 /**
  * This class is used for timing the performance

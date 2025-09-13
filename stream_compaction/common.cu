@@ -40,5 +40,34 @@ __global__ void kernScatter(int n, int* odata, const int* idata, const int* bool
     // TODO
 }
 
+__global__ void kernel_inclusiveToExclusive(int n, int identity, const int* iData, int* oData)
+{
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (index >= n)
+    {
+        return;
+    } else if (index == 0)
+    {
+        oData[index] = identity;
+    } else
+    {
+        oData[index] = iData[index - 1];
+    }
+}
+
+__global__ void kernel_copyData(int n, const int* iData, int* oData)
+{
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (index >= n)
+    {
+        return;
+    } else
+    {
+        oData[index] = iData[index];
+    }
+}
+
 }  // namespace Common
 }  // namespace StreamCompaction
