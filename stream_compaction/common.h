@@ -5,8 +5,6 @@
 
 #include <cstdio>
 #include <cstring>
-#include <cmath>
-#include <algorithm>
 #include <chrono>
 #include <stdexcept>
 
@@ -53,7 +51,7 @@ class PerformanceTimer
 public:
     bool cpu_timer_started = false;
     bool gpu_timer_started = false;
-    
+
     PerformanceTimer()
     {
         cudaEventCreate(&event_start);

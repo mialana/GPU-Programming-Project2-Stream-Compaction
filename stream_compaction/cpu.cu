@@ -23,7 +23,7 @@ PerformanceTimer& timer()
 void scan(int n, int* odata, const int* idata)
 {
     bool usingTimer = false;
-    if (!timer().cpu_timer_started) // added in order to call `scan` from other functions. 
+    if (!timer().cpu_timer_started)  // added in order to call `scan` from other functions.
     {
         timer().startCpuTimer();
         usingTimer = true;
@@ -98,7 +98,7 @@ int compactWithScan(int n, int* odata, const int* idata)
 
     timer().endCpuTimer();
 
-    return scan_isNotZero[n-1] + isNotZero[n-1]; // due to exclusive scan 
+    return scan_isNotZero[n - 1] + isNotZero[n - 1];  // due to exclusive scan
 }
 }  // namespace CPU
 }  // namespace StreamCompaction

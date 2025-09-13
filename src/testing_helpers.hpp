@@ -3,7 +3,6 @@
 #include <cstdlib>
 #include <cstdio>
 #include <iostream>
-#include <string>
 #include <ctime>
 
 template<typename T>
@@ -20,19 +19,19 @@ int cmpArrays(int n, T* a, T* b)
     return 0;
 }
 
-void printDesc(const char* desc)
+inline void printDesc(const char* desc)
 {
     printf("==== %s ====\n", desc);
 }
 
 template<typename T>
-void printCmpResult(int n, T* a, T* b)
+inline void printCmpResult(int n, T* a, T* b)
 {
     printf("    %s \n", cmpArrays(n, a, b) ? "FAIL VALUE" : "passed");
 }
 
 template<typename T>
-void printCmpLenResult(int n, int expN, T* a, T* b)
+inline void printCmpLenResult(int n, int expN, T* a, T* b)
 {
     if (n != expN)
     {
@@ -44,7 +43,7 @@ void printCmpLenResult(int n, int expN, T* a, T* b)
                                   : "passed");
 }
 
-void zeroArray(int n, int* a)
+inline void zeroArray(int n, int* a)
 {
     for (int i = 0; i < n; i++)
     {
@@ -52,7 +51,7 @@ void zeroArray(int n, int* a)
     }
 }
 
-void onesArray(int n, int* a)
+inline void onesArray(int n, int* a)
 {
     for (int i = 0; i < n; i++)
     {
@@ -60,7 +59,7 @@ void onesArray(int n, int* a)
     }
 }
 
-void genArray(int n, int* a, int maxval)
+inline void genArray(int n, int* a, int maxval)
 {
     srand(time(nullptr));
 
@@ -70,7 +69,7 @@ void genArray(int n, int* a, int maxval)
     }
 }
 
-void genConsecutiveArray(int n, int* a)
+inline void genConsecutiveArray(int n, int* a)
 {
     for (int i = 0; i < n; i++)
     {
@@ -78,7 +77,7 @@ void genConsecutiveArray(int n, int* a)
     }
 }
 
-void printArray(int n, int* a, bool abridged = false)
+inline void printArray(int n, int* a, bool abridged = false)
 {
     printf("    [ ");
     for (int i = 0; i < n; i++)
@@ -92,11 +91,10 @@ void printArray(int n, int* a, bool abridged = false)
     }
     printf("] - count: ");
     printf("%d\n", n);
-
 }
 
 template<typename T>
-void printElapsedTime(T time, const char* note = "")
+inline void printElapsedTime(T time, const char* note = "")
 {
     std::cout << "   elapsed time: " << time << "ms    " << note << std::endl;
 }
