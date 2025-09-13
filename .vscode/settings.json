@@ -6,7 +6,8 @@
     "--background-index",
     "--compile-commands-dir=${workspaceFolder}/build",
     "--query-driver=/usr/bin/g++",
-    "--query-driver=/usr/bin/clang++"
+    "--query-driver=/usr/bin/clang++",
+    "--query-driver=/usr/local/cuda/bin/nvcc"
   ],
   "[cpp][cuda-cpp][glsl]": {
     "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
