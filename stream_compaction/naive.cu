@@ -64,9 +64,11 @@ void scan(int n, int* odata, const int* idata)
         checkCUDAError("Perform Naive Scan Iteration CUDA kernel failed.");
 
         Common::kernel_copyData<<<blocks, BLOCK_SIZE>>>(n, dev_scanB, dev_scanA);
+        checkCUDAError("Copy Data CUDA kernel failed.");
     }
 
     Common::kernel_inclusiveToExclusive<<<blocks, BLOCK_SIZE>>>(n, 0, dev_scanA, dev_scanB);
+    checkCUDAError("Inclusive to Exclusive CUDA kernel failed.");
 
     timer().endGpuTimer();
 
