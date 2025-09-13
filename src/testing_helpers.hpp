@@ -21,7 +21,7 @@ int cmpArrays(int n, T* a, T* b)
 
 inline void printDesc(const char* desc)
 {
-    printf("\033[1;35m==== %s ====\033[0m\n", desc); // make pink
+    printf("\033[1;35m==== %s ====\033[0m\n", desc);  // make pink
 }
 
 template<typename T>
