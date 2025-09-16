@@ -24,12 +24,16 @@ __global__ void kernel_performNaiveScanIteration(const int n,
     int index = blockIdx.x * blockDim.x + threadIdx.x;
 
     int iter_startIdx = exp2f(iter - 1);
-    if (index < iter_startIdx || index >= n)
+    if (index >= n)
     {
         return;
+    } else if (index < iter_startIdx)
+    {
+        scanB[index] = scanA[index];
+        return;
+    } else {
+        scanB[index] = scanA[index - iter_startIdx] + scanA[index];
     }
-
-    scanB[index] = scanA[index - iter_startIdx] + scanA[index];
 }
 
 /**
@@ -63,10 +67,13 @@ void scan(int n, int* odata, const int* idata)
         kernel_performNaiveScanIteration<<<blocks, BLOCK_SIZE>>>(n, i, dev_scanA, dev_scanB);
         checkCUDAError("Perform Naive Scan Iteration CUDA kernel failed.");
 
-        Common::kernel_copyData<<<blocks, BLOCK_SIZE>>>(n, dev_scanB, dev_scanA);
-        checkCUDAError("Copy Data CUDA kernel failed.");
+        // ping-pong
+        int* temp = dev_scanA;
+        dev_scanA = dev_scanB;
+        dev_scanB = temp;
     }
 
+    // result ends up in dev_scanA
     Common::kernel_inclusiveToExclusive<<<blocks, BLOCK_SIZE>>>(n, 0, dev_scanA, dev_scanB);
     checkCUDAError("Inclusive to Exclusive CUDA kernel failed.");
 
