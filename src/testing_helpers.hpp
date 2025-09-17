@@ -37,10 +37,10 @@ inline void printCmpLenResult(int n, int expN, T* a, T* b)
     {
         printf("    expected %d elements, got %d\n", expN, n);
     }
-    printf("    %s \n",
-           (n == -1 || n != expN) ? "FAIL COUNT"
-           : cmpArrays(n, a, b)   ? "FAIL VALUE"
-                                  : "passed");
+    printf("    %s \033[0m\n",
+           (n == -1 || n != expN) ? "\033[1;31mFAIL COUNT"
+           : cmpArrays(n, a, b)   ? "\033[1;31mFAIL VALUE"
+                                  : "\033[1;32mpassed");
 }
 
 inline void zeroArray(int n, int* a)

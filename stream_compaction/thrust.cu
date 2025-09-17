@@ -6,8 +6,6 @@
 #include "common.h"
 #include "thrust.h"
 
-#include <iostream>
-
 namespace StreamCompaction
 {
 namespace Thrust

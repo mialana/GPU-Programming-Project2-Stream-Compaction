@@ -16,7 +16,7 @@
 // use during development with `#if !SKIP_UNIMPLEMENTED` preprocessor at desired skip point
 #define SKIP_UNIMPLEMENTED 1
 
-const int SIZE = 1 << 8;    // feel free to change the size of array
+const int SIZE = 1 << 28;    // feel free to change the size of array
 const int NPOT = SIZE - 3;  // Non-Power-Of-Two
 
 int* a = new int[SIZE];
@@ -131,7 +131,6 @@ int main()
     printArray(NPOT, c, true);
     printCmpResult(NPOT, b, c);
 
-#if !SKIP_UNIMPLEMENTED
     printf("\n");
     printf("*****************************\n");
     printf("** STREAM COMPACTION TESTS **\n");
@@ -186,7 +185,7 @@ int main()
     count = StreamCompaction::Efficient::compact(SIZE, c, a);
     printElapsedTime(StreamCompaction::Efficient::timer().getGpuElapsedTimeForPreviousOperation(),
                      "(CUDA Measured)");
-    // printArray(count, c, true);
+    printArray(count, c, true);
     printCmpLenResult(count, expectedCount, b, c);
 
     zeroArray(SIZE, c);
@@ -194,10 +193,8 @@ int main()
     count = StreamCompaction::Efficient::compact(NPOT, c, a);
     printElapsedTime(StreamCompaction::Efficient::timer().getGpuElapsedTimeForPreviousOperation(),
                      "(CUDA Measured)");
-    // printArray(count, c, true);
+    printArray(count, c, true);
     printCmpLenResult(count, expectedNPOT, b, c);
-
-#endif
 
 #if defined(_WIN32) || defined(_WIN64)  // errors out on linux
     system("pause");                    // stop Win32 console from closing on exit

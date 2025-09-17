@@ -59,7 +59,7 @@ void scan(int n, int* odata, const int* idata)
 
     cudaMemcpy(dev_scanA, idata, sizeof(int) * n, cudaMemcpyHostToDevice);
     checkCUDAError("Memory copy from input data to scan array A failed.");
-    cudaMemcpy(dev_scanB, idata, sizeof(int) * n, cudaMemcpyHostToDevice);
+    cudaMemcpy(dev_scanB, odata, sizeof(int) * n, cudaMemcpyHostToDevice);
     checkCUDAError("Memory copy from output data to scan array B failed.");
 
     cudaDeviceSynchronize();
