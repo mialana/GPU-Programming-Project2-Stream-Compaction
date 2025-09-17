@@ -1,14 +1,54 @@
-CUDA Stream Compaction
+CUDA Parallel Scan Algorithm and Stream Compaction Implementation
 ======================
 
-**University of Pennsylvania, CIS 565: GPU Programming and Architecture, Project 2**
+University of Pennsylvania, CIS 5650: GPU Programming and Architecture, Project 2
 
-* (TODO) YOUR NAME HERE
-  * (TODO) [LinkedIn](), [personal website](), [twitter](), etc.
-* Tested on: (TODO) Windows 22, i7-2222 @ 2.22GHz 22GB, GTX 222 222MB (Moore 2222 Lab)
+- Amy Liu
+  - [Personal Website](https://amyliu.dev), [LinkedIn](https://linkedin.com/in/miyalana), [Github](https://github.com/mialana).
+- Tested on: Fedora 42 KDE Plasma, Wayland Protocol, Optimus GPU (Intel(R) Core(TM) Ultra 9 275HX 32GiB, NVIDIA GeForce RTX 5070Ti 12227MiB)
 
-### (TODO: Your README)
+Array size: 262144
+Block Size: 
 
-Include analysis, etc. (Remember, this is public, so don't put
-anything here that you don't want to share with the world.)
+8
+0.318709
+1.22598
+0.2816
+2.09114
+
+16
+0.339354
+0.790464
+0.1536
+2.05978
+
+32
+0.329103ms 
+0.580896ms 
+0.139808ms
+1.20006ms
+
+128
+0.342237
+2.14592
+0.26032
+2.06634
+
+256
+0.331082
+0.4792
+0.246752
+2.13478
+
+512
+0.321641
+2.85651
+0.239296
+2.04694
+
+1024
+0.335945
+0.504672
+0.26576
+2.13779
 
