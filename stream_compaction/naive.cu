@@ -27,13 +27,19 @@ __global__ void kernel_performNaiveScanIteration(const int n,
     if (index >= n)
     {
         return;
-    } else if (index < iter_startIdx)
+    }
+
+    if (index < iter_startIdx)
     {
         scanB[index] = scanA[index];
-        return;
-    } else {
+    } else
+    {
         scanB[index] = scanA[index - iter_startIdx] + scanA[index];
     }
+
+    // profile time efficiency
+    // scanB[index] = index < iter_startIdx ? scanA[index]
+    //                                      : scanA[index - iter_startIdx] + scanA[index];
 }
 
 /**
@@ -83,6 +89,9 @@ void scan(int n, int* odata, const int* idata)
                dev_scanB,
                sizeof(int) * n,
                cudaMemcpyDeviceToHost);  // result ends up in scanB
+
+    cudaFree(dev_scanA);
+    cudaFree(dev_scanB);  // can't forget memory leaks!
 }
 }  // namespace Naive
 }  // namespace StreamCompaction

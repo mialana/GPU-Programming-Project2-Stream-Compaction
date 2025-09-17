@@ -6,6 +6,8 @@
 #include "common.h"
 #include "thrust.h"
 
+#include <iostream>
+
 namespace StreamCompaction
 {
 namespace Thrust
@@ -24,7 +26,7 @@ PerformanceTimer& timer()
 void scan(int n, int* odata, const int* idata)
 {
     // Copy data from host to device
-    thrust::host_vector<int> host_idata(idata, idata + n);  // thrust hst vector
+    thrust::host_vector<int> host_idata(idata, idata + n);  // thrust host vector
     thrust::device_vector<int> dev_idata = host_idata;      // built-in assignment conversion
     thrust::device_vector<int> dev_odata(n);                // for output
 
