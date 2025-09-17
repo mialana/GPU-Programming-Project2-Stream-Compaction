@@ -73,17 +73,9 @@ __global__ void kernel_inclusiveToExclusive(int n, int identity, const int* iDat
     }
 }
 
-__global__ void kernel_copyData(int n, const int* iData, int* oData)
+__global__ void kernel_setDeviceArrayValue(int* arr, const int index, const int value)
 {
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (index >= n)
-    {
-        return;
-    } else
-    {
-        oData[index] = iData[index];
-    }
+    arr[index] = value;  // round up to nearest power of two
 }
 
 }  // namespace Common

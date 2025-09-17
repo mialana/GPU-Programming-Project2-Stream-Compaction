@@ -17,16 +17,13 @@ PerformanceTimer& timer()
 
 __global__ void kernel_efficientUpSweep(const int n, const int iter, int* scan)
 {
+    int iterTarget = 1 << (iter + 1);
+    int iterFactor = 1 << iter;
+
     int index = blockIdx.x * blockDim.x + threadIdx.x;
+    index *= iterTarget;
 
-    if (index >= n)
-    {
-        return;
-    }
-    int iterFactor = exp2f(iter);
-
-    int iterTarget = exp2f(iter + 1);
-    if (index % iterTarget == 0)
+    if (index + iterTarget - 1 < n)
     {
         scan[index + iterTarget - 1] += scan[index + iterFactor - 1];
     }
@@ -34,28 +31,18 @@ __global__ void kernel_efficientUpSweep(const int n, const int iter, int* scan)
 
 __global__ void kernel_efficientDownSweep(const int n, const int iter, int* scan)
 {
+    int iterTarget = 1 << (iter + 1);
+    int iterFactor = 1 << iter;
+
     int index = blockIdx.x * blockDim.x + threadIdx.x;
+    index = index * iterTarget;
 
-    if (index >= n)
-    {
-        return;
-    }
-
-    int iterFactor = exp2f(iter);
-    int iterTarget = exp2f(iter + 1);
-
-    if (index % iterTarget == 0)
+    if (index + iterTarget - 1 < n)
     {
         int leftChild = scan[index + iterFactor - 1];
         scan[index + iterFactor - 1] = scan[index + iterTarget - 1];
-
         scan[index + iterTarget - 1] += leftChild;
     }
-}
-
-__global__ void kernel_setFirstZero(const int n, int* scan)
-{
-    scan[(int)exp2f(n) - 1] = 0;  // round up to nearest power of two
 }
 
 /**
@@ -63,13 +50,16 @@ __global__ void kernel_setFirstZero(const int n, int* scan)
  */
 void scan(int n, int* odata, const int* idata)
 {
+    int numLayers = ilog2ceil(n);
+    int paddedN = 1 << ilog2ceil(n);
+
     // create two device arrays
     int* dev_scan;
 
-    cudaMalloc((void**)&dev_scan, sizeof(int) * n);
+    cudaMalloc((void**)&dev_scan, sizeof(int) * paddedN);
     checkCUDAError("CUDA malloc for scan array failed.");
 
-    cudaMemcpy(dev_scan, idata, sizeof(int) * n, cudaMemcpyHostToDevice);
+    cudaMemcpy(dev_scan, idata, sizeof(int) * paddedN, cudaMemcpyHostToDevice);
     checkCUDAError("Memory copy from input data to scan array failed.");
 
     cudaDeviceSynchronize();
@@ -81,19 +71,21 @@ void scan(int n, int* odata, const int* idata)
         usingTimer = true;
     }
 
-    int blocks = divup(n, BLOCK_SIZE);
+    int blocks;
 
-    for (int i = 0; i <= ilog2ceil(n) - 1; i++)
+    for (int i = 0; i <= numLayers - 1; i++)
     {
-        kernel_efficientUpSweep<<<blocks, BLOCK_SIZE>>>(n, i, dev_scan);
+        blocks = divup(paddedN / (1 << (i + 1)), BLOCK_SIZE);
+        kernel_efficientUpSweep<<<blocks, BLOCK_SIZE>>>(paddedN, i, dev_scan);
         checkCUDAError("Perform Work-Efficient Scan Up Sweep Iteration CUDA kernel failed.");
     }
 
-    kernel_setFirstZero<<<1, 1>>>(ilog2ceil(n), dev_scan);
+    Common::kernel_setDeviceArrayValue<<<1, 1>>>(dev_scan, paddedN - 1, 0);
 
-    for (int i = ilog2ceil(n) - 1; i >= 0; i--)
+    for (int i = numLayers - 1; i >= 0; i--)
     {
-        kernel_efficientDownSweep<<<blocks, BLOCK_SIZE>>>(n, i, dev_scan);
+        blocks = divup(paddedN / (1 << (i + 1)), BLOCK_SIZE);
+        kernel_efficientDownSweep<<<blocks, BLOCK_SIZE>>>(paddedN, i, dev_scan);
         checkCUDAError("Perform Work-Efficient Scan Down Sweep Iteration CUDA kernel failed.");
     }
 

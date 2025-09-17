@@ -49,7 +49,7 @@ __global__ void kernScatter(
 
 __global__ void kernel_inclusiveToExclusive(int n, int identity, const int* iData, int* oData);
 
-__global__ void kernel_copyData(int n, const int* iData, int* oData);
+__global__ void kernel_setDeviceArrayValue(int* arr, const int index, const int value);
 
 /**
  * This class is used for timing the performance
