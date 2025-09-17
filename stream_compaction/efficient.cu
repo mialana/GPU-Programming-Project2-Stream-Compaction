@@ -15,7 +15,7 @@ PerformanceTimer& timer()
     return timer;
 }
 
-__global__ void kernel_performEfficientScanUpSweepIteration(const int n, const int iter, int* scan)
+__global__ void kernel_efficientUpSweep(const int n, const int iter, int* scan)
 {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -32,7 +32,7 @@ __global__ void kernel_performEfficientScanUpSweepIteration(const int n, const i
     }
 }
 
-__global__ void kernel_performEfficientScanDownSweepIteration(const int n, const int iter, int* scan)
+__global__ void kernel_efficientDownSweep(const int n, const int iter, int* scan)
 {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -85,7 +85,7 @@ void scan(int n, int* odata, const int* idata)
 
     for (int i = 0; i <= ilog2ceil(n) - 1; i++)
     {
-        kernel_performEfficientScanUpSweepIteration<<<blocks, BLOCK_SIZE>>>(n, i, dev_scan);
+        kernel_efficientUpSweep<<<blocks, BLOCK_SIZE>>>(n, i, dev_scan);
         checkCUDAError("Perform Work-Efficient Scan Up Sweep Iteration CUDA kernel failed.");
     }
 
@@ -93,7 +93,7 @@ void scan(int n, int* odata, const int* idata)
 
     for (int i = ilog2ceil(n) - 1; i >= 0; i--)
     {
-        kernel_performEfficientScanDownSweepIteration<<<blocks, BLOCK_SIZE>>>(n, i, dev_scan);
+        kernel_efficientDownSweep<<<blocks, BLOCK_SIZE>>>(n, i, dev_scan);
         checkCUDAError("Perform Work-Efficient Scan Down Sweep Iteration CUDA kernel failed.");
     }
 
@@ -155,6 +155,7 @@ int compact(int n, int* odata, const int* idata)
     Common::kernMapToBoolean<<<blocks, BLOCK_SIZE>>>(n, dev_bools, dev_idata);
 
     cudaMemcpy(bools, dev_bools, sizeof(int) * n, cudaMemcpyDeviceToHost);
+    checkCUDAError("Memory copy from device bools to indices array failed.");
 
     scan(n, indices, bools);
 
