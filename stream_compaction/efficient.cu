@@ -115,6 +115,8 @@ void scan(int n, int* odata, const int* idata)
  */
 int compact(int n, int* odata, const int* idata)
 {
+    // TODO: these arrays are unnecessary. will optimize soon.
+
     // create device arrays
     int* dev_idata;
     int* dev_odata;
