@@ -45,6 +45,27 @@ __global__ void kernel_efficientDownSweep(const int n, const int iter, int* scan
     }
 }
 
+// the inner operation of scan without timers and allocation
+void scanHelper(int numLayers, int paddedN, int* dev_scan)
+{
+    int blocks;
+    for (int i = 0; i <= numLayers - 1; i++)
+    {
+        blocks = divup(paddedN / (1 << (i + 1)), BLOCK_SIZE);
+        kernel_efficientUpSweep<<<blocks, BLOCK_SIZE>>>(paddedN, i, dev_scan);
+        checkCUDAError("Perform Work-Efficient Scan Up Sweep Iteration CUDA kernel failed.");
+    }
+
+    Common::kernel_setDeviceArrayValue<<<1, 1>>>(dev_scan, paddedN - 1, 0);
+
+    for (int i = numLayers - 1; i >= 0; i--)
+    {
+        blocks = divup(paddedN / (1 << (i + 1)), BLOCK_SIZE);
+        kernel_efficientDownSweep<<<blocks, BLOCK_SIZE>>>(paddedN, i, dev_scan);
+        checkCUDAError("Perform Work-Efficient Scan Down Sweep Iteration CUDA kernel failed.");
+    }
+}
+
 /**
  * Performs prefix-sum (aka scan) on idata, storing the result into odata.
  */
@@ -71,23 +92,7 @@ void scan(int n, int* odata, const int* idata)
         usingTimer = true;
     }
 
-    int blocks;
-
-    for (int i = 0; i <= numLayers - 1; i++)
-    {
-        blocks = divup(paddedN / (1 << (i + 1)), BLOCK_SIZE);
-        kernel_efficientUpSweep<<<blocks, BLOCK_SIZE>>>(paddedN, i, dev_scan);
-        checkCUDAError("Perform Work-Efficient Scan Up Sweep Iteration CUDA kernel failed.");
-    }
-
-    Common::kernel_setDeviceArrayValue<<<1, 1>>>(dev_scan, paddedN - 1, 0);
-
-    for (int i = numLayers - 1; i >= 0; i--)
-    {
-        blocks = divup(paddedN / (1 << (i + 1)), BLOCK_SIZE);
-        kernel_efficientDownSweep<<<blocks, BLOCK_SIZE>>>(paddedN, i, dev_scan);
-        checkCUDAError("Perform Work-Efficient Scan Down Sweep Iteration CUDA kernel failed.");
-    }
+    scanHelper(numLayers, paddedN, dev_scan);
 
     if (usingTimer)
     {
