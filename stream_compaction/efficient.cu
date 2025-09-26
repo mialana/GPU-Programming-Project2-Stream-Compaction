@@ -20,7 +20,7 @@ __global__ void kernel_efficientUpSweep(const int n, const int iter, int* scan)
     int iterTarget = 1 << (iter + 1);
     int iterFactor = 1 << iter;
 
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    unsigned long long index = blockIdx.x * blockDim.x + threadIdx.x;  // allow to exceed 32-bit
     index *= iterTarget;
 
     if (index + iterTarget - 1 < n)
@@ -34,7 +34,7 @@ __global__ void kernel_efficientDownSweep(const int n, const int iter, int* scan
     int iterTarget = 1 << (iter + 1);
     int iterFactor = 1 << iter;
 
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    unsigned long long index = blockIdx.x * blockDim.x + threadIdx.x;
     index = index * iterTarget;
 
     if (index + iterTarget - 1 < n)
@@ -71,8 +71,8 @@ void scanHelper(int numLayers, int paddedN, int* dev_scan)
  */
 void scan(int n, int* odata, const int* idata)
 {
-    int numLayers = ilog2ceil(n);
-    int paddedN = 1 << ilog2ceil(n);
+    unsigned long long numLayers = ilog2ceil(n);
+    unsigned long long paddedN = 1 << ilog2ceil(n);
 
     // create two device arrays
     int* dev_scan;
@@ -80,7 +80,7 @@ void scan(int n, int* odata, const int* idata)
     cudaMalloc((void**)&dev_scan, sizeof(int) * paddedN);
     checkCUDAError("CUDA malloc for scan array failed.");
 
-    cudaMemcpy(dev_scan, idata, sizeof(int) * paddedN, cudaMemcpyHostToDevice);
+    cudaMemcpy(dev_scan, idata, sizeof(int) * n, cudaMemcpyHostToDevice);
     checkCUDAError("Memory copy from input data to scan array failed.");
 
     cudaDeviceSynchronize();
@@ -141,7 +141,7 @@ int compact(int n, int* odata, const int* idata)
 
     cudaDeviceSynchronize();
 
-    int* indices = new int[n]; // create cpu side indices array
+    int* indices = new int[n];  // create cpu side indices array
     int* bools = new int[n];
 
     timer().startGpuTimer();
@@ -170,7 +170,7 @@ int compact(int n, int* odata, const int* idata)
     cudaFree(dev_bools);
     cudaFree(dev_indices);
 
-    return indices[n-1] + bools[n-1];
+    return indices[n - 1] + bools[n - 1];
 }
 }  // namespace Efficient
 }  // namespace StreamCompaction

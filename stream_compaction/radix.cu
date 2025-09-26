@@ -6,8 +6,6 @@
 #include "common.h"
 #include "efficient.h"
 
-#include <bitset>
-
 namespace StreamCompaction
 {
 namespace Radix
@@ -37,7 +35,7 @@ __global__ void _split(int n, int* data, int* notBit, const int tgtBit)
     notBit[index] = _isolateBit(data[index], tgtBit) ^ 1;  // not(target bit)
 }
 
-__global__ void _scatter(int n, int* data, const int* scan, const int tgtBit)
+__global__ void _scatter(int n, int* odata, const int* idata, const int* scan, const int tgtBit)
 {
     int index = (blockIdx.x * blockDim.x) + threadIdx.x;
 
@@ -49,34 +47,41 @@ __global__ void _scatter(int n, int* data, const int* scan, const int tgtBit)
     __shared__ int totalFalses;
     if (threadIdx.x == 0)
     {
-        totalFalses = (_isolateBit(data[n - 1], tgtBit) ^ 1) + scan[n - 1];
+        totalFalses = (_isolateBit(idata[n - 1], tgtBit) ^ 1) + scan[n - 1];
     }
 
-    int savedVal = data[index];
-    __syncthreads();  // wait for totalFalses and savedVal
+    __syncthreads();  // wait for totalFalses
 
     // if value is 1, we shift right by total falses minus falses before current index
     // if value is 0, we set to position based on how many other falses / 0s come before it
-    int address = _isolateBit(savedVal, tgtBit) ? index + (totalFalses - scan[index]) : scan[index];
+    int address = _isolateBit(idata[index], tgtBit) ? index + (totalFalses - scan[index])
+                                                    : scan[index];
 
     __syncthreads();
 
-    data[address] = savedVal;
+    odata[address] = idata[index];
 }
 
 void sort(int n, int* odata, const int* idata, const int maxBitLength)
 {
+    const unsigned numLayers = ilog2ceil(n);
+    const unsigned paddedN = 1 << ilog2ceil(n);
+
     // create device arrays
-    int* dev_arr1;
-    int* dev_arr2;
+    int* dev_idata;
+    int* dev_odata;
+    int* dev_scan;
 
-    cudaMalloc((void**)&dev_arr1, sizeof(int) * n);
-    checkCUDAError("CUDA malloc for 1st array failed.");
+    cudaMalloc((void**)&dev_idata, sizeof(int) * n);
+    checkCUDAError("CUDA malloc for device in data array failed.");
 
-    cudaMalloc((void**)&dev_arr2, sizeof(int) * n);
-    checkCUDAError("CUDA malloc for 2nd array failed.");
+    cudaMalloc((void**)&dev_odata, sizeof(int) * n);
+    checkCUDAError("CUDA malloc for device out data array failed.");
 
-    cudaMemcpy(dev_arr1, idata, sizeof(int) * n, cudaMemcpyHostToDevice);
+    cudaMalloc((void**)&dev_scan, sizeof(int) * paddedN);
+    checkCUDAError("CUDA malloc for device scan array failed.");
+
+    cudaMemcpy(dev_idata, idata, sizeof(int) * n, cudaMemcpyHostToDevice);
     checkCUDAError("Memory copy from host idata to device array failed.");
 
     bool usingTimer = false;
@@ -89,11 +94,15 @@ void sort(int n, int* odata, const int* idata, const int maxBitLength)
     for (int tgtBit = 0; tgtBit < maxBitLength; tgtBit++)
     {
         unsigned blocks = divup(n, BLOCK_SIZE);
-        _split<<<blocks, BLOCK_SIZE>>>(n, dev_arr1, dev_arr2, tgtBit);
+        _split<<<blocks, BLOCK_SIZE>>>(n, dev_idata, dev_scan, tgtBit);
 
-        Efficient::scanHelper(ilog2ceil(n), 1 << ilog2ceil(n), dev_arr2);
+        Efficient::scanHelper(numLayers, paddedN, dev_scan);
 
-        _scatter<<<blocks, BLOCK_SIZE>>>(n, dev_arr1, dev_arr2, tgtBit);
+        _scatter<<<blocks, BLOCK_SIZE>>>(n, dev_odata, dev_idata, dev_scan, tgtBit);
+
+        int* temp = dev_idata;
+        dev_idata = dev_odata;
+        dev_odata = temp;
     }
 
     if (usingTimer)
@@ -101,11 +110,12 @@ void sort(int n, int* odata, const int* idata, const int maxBitLength)
         timer().endGpuTimer();
     }
 
-    cudaMemcpy(odata, dev_arr1, sizeof(int) * n, cudaMemcpyDeviceToHost);
+    cudaMemcpy(odata, dev_idata, sizeof(int) * n, cudaMemcpyDeviceToHost);
     checkCUDAError("Memory copy from device array to host odata failed.");
 
-    cudaFree(dev_arr1);
-    cudaFree(dev_arr2);
+    cudaFree(dev_idata);
+    cudaFree(dev_odata);
+    cudaFree(dev_scan);
 }
 
 }  // namespace Radix
