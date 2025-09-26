@@ -17,7 +17,7 @@
 // use during development with `#if !SKIP_UNIMPLEMENTED` preprocessor at desired skip point
 #define SKIP_UNIMPLEMENTED 1
 
-const int SIZE = 1 << 3;    // feel free to change the size of array
+const int SIZE = 1 << 26;   // feel free to change the size of array
 const int NPOT = SIZE - 3;  // Non-Power-Of-Two
 
 int* a = new int[SIZE];
@@ -51,6 +51,22 @@ int main()
     genArray(SIZE - 1, a, 50);  // Leave a 0 at the end to test that edge case
     a[SIZE - 1] = 0;
     printArray(SIZE, a, true);
+
+    printf("\n");
+    printf("*****************************\n");
+    printf("** RADIX SORT TESTS **\n");
+    printf("*****************************\n");
+
+    zeroArray(SIZE, c);
+    printDesc("radix sort, power-of-two");
+    StreamCompaction::Radix::sort(SIZE, c, a, 6);
+
+    printElapsedTime(StreamCompaction::Radix::timer().getGpuElapsedTimeForPreviousOperation(),
+                     "(std::chrono Measured)");
+
+    printArray(SIZE, c, true);
+
+    printf("*****************************\n");
 
     // initialize b using StreamCompaction::CPU::scan you implement
     // We use b for further comparison. Make sure your StreamCompaction::CPU::scan is correct.
@@ -196,18 +212,6 @@ int main()
                      "(CUDA Measured)");
     printArray(count, c, true);
     printCmpLenResult(count, expectedNPOT, b, c);
-
-    printf("\n");
-    printf("*****************************\n");
-    printf("** RADIX SORT TESTS **\n");
-    printf("*****************************\n");
-
-    zeroArray(SIZE, c);
-    printDesc("radix sort, power-of-two");
-    StreamCompaction::Radix::sort(SIZE, c, a, 6);
-
-    printArray(count, c, true);
-
 
 #if defined(_WIN32) || defined(_WIN64)  // errors out on linux
     system("pause");                    // stop Win32 console from closing on exit

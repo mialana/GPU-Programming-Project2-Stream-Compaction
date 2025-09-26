@@ -6,6 +6,8 @@
 #include "common.h"
 #include "efficient.h"
 
+#include <bitset>
+
 namespace StreamCompaction
 {
 namespace Radix
@@ -51,10 +53,11 @@ __global__ void _scatter(int n, int* data, const int* scan, const int tgtBit)
     }
 
     int savedVal = data[index];
-    __syncthreads(); // wait for totalFalses and savedVal
+    __syncthreads();  // wait for totalFalses and savedVal
 
-    int address = (_isolateBit(savedVal, tgtBit)) ? (scan[index])
-                                                 : index - scan[index] + totalFalses;
+    // if value is 1, we shift right by total falses minus falses before current index
+    // if value is 0, we set to position based on how many other falses / 0s come before it
+    int address = _isolateBit(savedVal, tgtBit) ? index + (totalFalses - scan[index]) : scan[index];
 
     __syncthreads();
 
@@ -76,6 +79,13 @@ void sort(int n, int* odata, const int* idata, const int maxBitLength)
     cudaMemcpy(dev_arr1, idata, sizeof(int) * n, cudaMemcpyHostToDevice);
     checkCUDAError("Memory copy from host idata to device array failed.");
 
+    bool usingTimer = false;
+    if (!timer().gpu_timer_started)
+    {
+        timer().startGpuTimer();
+        usingTimer = true;
+    }
+
     for (int tgtBit = 0; tgtBit < maxBitLength; tgtBit++)
     {
         unsigned blocks = divup(n, BLOCK_SIZE);
@@ -84,6 +94,11 @@ void sort(int n, int* odata, const int* idata, const int maxBitLength)
         Efficient::scanHelper(ilog2ceil(n), 1 << ilog2ceil(n), dev_arr2);
 
         _scatter<<<blocks, BLOCK_SIZE>>>(n, dev_arr1, dev_arr2, tgtBit);
+    }
+
+    if (usingTimer)
+    {
+        timer().endGpuTimer();
     }
 
     cudaMemcpy(odata, dev_arr1, sizeof(int) * n, cudaMemcpyDeviceToHost);
