@@ -96,7 +96,7 @@ int main()
     printArray(SIZE, c, true);
 
     printDesc("custom radix sort by key, power-of-two");
-    StreamCompaction::Radix::sortByKey(SIZE, d, e, a, values, 6);
+    StreamCompaction::Radix::sortByKeyWrapper(SIZE, d, e, a, values, 6);
 
     printElapsedTime(StreamCompaction::Radix::timer().getGpuElapsedTimeForPreviousOperation(),
                      "(std::chrono Measured)");
