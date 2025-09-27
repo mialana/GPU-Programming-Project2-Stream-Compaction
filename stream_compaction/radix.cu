@@ -31,8 +31,8 @@ __global__ void StreamCompaction::Radix::_split(int n, int* data, int* notBit, c
     notBit[index] = _isolateBit(data[index], tgtBit) ^ 1;  // not(target bit)
 }
 
-__global__ void StreamCompaction::Radix::_scatter(
-    int n, int* odata, const int* idata, const int* scan, const int tgtBit)
+__global__ void StreamCompaction::Radix::_computeScatterIndices(
+    int n, int* indices, const int* idata, const int* scan, const int tgtBit)
 {
     int index = (blockIdx.x * blockDim.x) + threadIdx.x;
 
@@ -51,12 +51,25 @@ __global__ void StreamCompaction::Radix::_scatter(
 
     // if value is 1, we shift right by total falses minus falses before current index
     // if value is 0, we set to position based on how many other falses / 0s come before it
-    int address = _isolateBit(idata[index], tgtBit) ? index + (totalFalses - scan[index])
-                                                    : scan[index];
+    indices[index] = _isolateBit(idata[index], tgtBit) ? index + (totalFalses - scan[index])
+                                                       : scan[index];
+}
 
-    __syncthreads();
+template<typename T>
+__global__ void StreamCompaction::Radix::_scatter(int n,
+                                                  T* odata,
+                                                  const T* idata,
+                                                  const int* indices)
+{
+    int index = (blockIdx.x * blockDim.x) + threadIdx.x;
 
-    odata[address] = idata[index];
+    if (index >= n)
+    {
+        return;
+    }
+
+    int address = indices[index];
+    odata[address] = idata[index];  // Scatter the value to its new position
 }
 
 void StreamCompaction::Radix::sort(int n, int* odata, const int* idata, const int maxBitLength)
@@ -67,6 +80,7 @@ void StreamCompaction::Radix::sort(int n, int* odata, const int* idata, const in
     // Allocate device memory for input/output data and scan
     int* dev_data[2];
     int* dev_scan;
+    int* dev_indices;
 
     cudaMalloc((void**)&dev_data[0], sizeof(int) * n);
     checkCUDAError("CUDA malloc for device data array failed.");
@@ -76,6 +90,9 @@ void StreamCompaction::Radix::sort(int n, int* odata, const int* idata, const in
 
     cudaMalloc((void**)&dev_scan, sizeof(int) * paddedN);
     checkCUDAError("CUDA malloc for device scan array failed.");
+
+    cudaMalloc((void**)&dev_indices, sizeof(int) * n);
+    checkCUDAError("CUDA malloc for device indices array failed.");
 
     // Copy input data to device
     cudaMemcpy(dev_data[0], idata, sizeof(int) * n, cudaMemcpyHostToDevice);
@@ -101,11 +118,13 @@ void StreamCompaction::Radix::sort(int n, int* odata, const int* idata, const in
         Efficient::scanHelper(numLayers, paddedN, dev_scan);
 
         // Scatter data based on the split results
-        _scatter<<<blocks, BLOCK_SIZE>>>(n,
-                                         dev_data[1 - current],
-                                         dev_data[current],
-                                         dev_scan,
-                                         tgtBit);
+        _computeScatterIndices<<<blocks, BLOCK_SIZE>>>(n,
+                                                       dev_indices,
+                                                       dev_data[current],
+                                                       dev_scan,
+                                                       tgtBit);
+
+        _scatter<<<blocks, BLOCK_SIZE>>>(n, dev_data[1 - current], dev_data[current], dev_indices);
 
         // Swap buffers (ping-pong)
         current = 1 - current;
@@ -137,6 +156,7 @@ void StreamCompaction::Radix::sortByKey(
     int* dev_keys[2];
     T* dev_values[2];
     int* dev_scan;
+    int* dev_indices;
 
     cudaMalloc((void**)&dev_keys[0], sizeof(int) * n);
     checkCUDAError("CUDA malloc for device keys array failed.");
@@ -152,6 +172,9 @@ void StreamCompaction::Radix::sortByKey(
 
     cudaMalloc((void**)&dev_scan, sizeof(int) * paddedN);
     checkCUDAError("CUDA malloc for device scan array failed.");
+
+    cudaMalloc((void**)&dev_indices, sizeof(int) * n);
+    checkCUDAError("CUDA malloc for device indices array failed.");
 
     // Copy keys and objects to device
     cudaMemcpy(dev_keys[0], keys, sizeof(int) * n, cudaMemcpyHostToDevice);
@@ -173,16 +196,18 @@ void StreamCompaction::Radix::sortByKey(
         Efficient::scanHelper(numLayers, paddedN, dev_scan);
 
         // Scatter keys and rearrange objects based on the sorted keys
-        _scatter<<<blocks, BLOCK_SIZE>>>(n,
-                                         dev_keys[1 - current],
-                                         dev_keys[current],
-                                         dev_scan,
-                                         tgtBit);
-        _scatter<<<blocks, BLOCK_SIZE>>>(n,
-                                         dev_values[1 - current],
-                                         dev_values[current],
-                                         dev_scan,
-                                         tgtBit);
+        _computeScatterIndices<<<blocks, BLOCK_SIZE>>>(n,
+                                                       dev_indices,
+                                                       dev_keys[current],
+                                                       dev_scan,
+                                                       tgtBit);
+
+        // Scatter keys based on the computed indices
+        _scatter<<<blocks, BLOCK_SIZE>>>(n, dev_keys[1 - current], dev_keys[current], dev_indices);
+
+        // Scatter values based on the computed indices
+        _scatter<<<blocks, BLOCK_SIZE>>>(n, dev_values[1 - current], dev_values[current], dev_indices);
+
 
         // Swap buffers (ping-pong)
         current = 1 - current;
@@ -204,3 +229,6 @@ void StreamCompaction::Radix::sortByKey(
 
 template void StreamCompaction::Radix::sortByKey<int>(
     int n, int* outKeys, int* outValues, const int* keys, const int* values, const int maxBitLength);
+
+template void StreamCompaction::Radix::sortByKey<float>(
+    int n, int* outKeys, float* outValues, const int* keys, const float* values, const int maxBitLength);

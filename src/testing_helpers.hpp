@@ -59,7 +59,8 @@ inline void onesArray(int n, int* a)
     }
 }
 
-inline void genArray(int n, int* a, int maxval, float offset)
+template<typename T>
+inline void genArray(int n, T* a, int maxval, float offset)
 {
     srand(time(nullptr) + offset);
 
@@ -85,7 +86,8 @@ inline void genConsecutiveArray(int n, int* a)
     }
 }
 
-inline void printArray(int n, int* a, bool abridged = false)
+template<typename T>
+inline void printArray(int n, T* a, bool abridged = false)
 {
     printf("    [ ");
     for (int i = 0; i < n; i++)
