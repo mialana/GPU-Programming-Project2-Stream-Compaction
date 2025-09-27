@@ -12,7 +12,7 @@ while true; do
         trash build;
         mkdir build;
         cd build;
-        /opt/cmake-4.1.1/bin/cmake .. -DCMAKE_BUILD_TYPE=Release;
+        /opt/cmake-4.1.1/bin/cmake .. -DCMAKE_BUILD_TYPE=Release -GNinja;
         make -j$(nproc --all);
 
         cd $CURRENT_DIR; # cd to stored original directory 

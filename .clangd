@@ -31,10 +31,10 @@ CompileFlags:
     - -xcuda
     - -O3
     - -use_fast_math
----
-If:
-  PathMatch: stream_compaction/thrust\.cu
-Diagnostics:
-  Suppress: # supress errors from thrust base code
-    - no_member 
-    - typename_nested_not_found
+# ---
+# If:
+#   PathMatch: stream_compaction/thrust\.cu
+# Diagnostics:
+#   Suppress: # supress errors from thrust base code
+#     - no_member 
+#     - typename_nested_not_found
