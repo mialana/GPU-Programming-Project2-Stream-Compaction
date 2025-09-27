@@ -64,9 +64,9 @@ int main()
                      "(std::chrono Measured)");
     printArray(SIZE, b, true);
 
-    zeroArray(SIZE, c);
+    copyArray(SIZE, c, a); // want to do in-place
     printDesc("radix sort, power-of-two");
-    StreamCompaction::Radix::sort(SIZE, c, a, 6);
+    StreamCompaction::Radix::sort(SIZE, c, 6);
 
     printElapsedTime(StreamCompaction::Radix::timer().getGpuElapsedTimeForPreviousOperation(),
                      "(std::chrono Measured)");

@@ -6,24 +6,20 @@
 #include "common.h"
 #include "efficient.h"
 
-namespace StreamCompaction
-{
-namespace Radix
-{
 using StreamCompaction::Common::PerformanceTimer;
 
-PerformanceTimer& timer()
+PerformanceTimer& StreamCompaction::Radix::timer()
 {
     static PerformanceTimer timer;
     return timer;
 }
 
-__device__ __host__ int _isolateBit(const int num, const int tgtBit)
+__device__ __host__ int StreamCompaction::Radix::_isolateBit(const int num, const int tgtBit)
 {
     return (num >> tgtBit) & 1;
 }
 
-__global__ void _split(int n, int* data, int* notBit, const int tgtBit)
+__global__ void StreamCompaction::Radix::_split(int n, int* data, int* notBit, const int tgtBit)
 {
     int index = (blockIdx.x * blockDim.x) + threadIdx.x;
 
@@ -35,7 +31,8 @@ __global__ void _split(int n, int* data, int* notBit, const int tgtBit)
     notBit[index] = _isolateBit(data[index], tgtBit) ^ 1;  // not(target bit)
 }
 
-__global__ void _scatter(int n, int* odata, const int* idata, const int* scan, const int tgtBit)
+__global__ void StreamCompaction::Radix::_scatter(
+    int n, int* odata, const int* idata, const int* scan, const int tgtBit)
 {
     int index = (blockIdx.x * blockDim.x) + threadIdx.x;
 
@@ -62,7 +59,7 @@ __global__ void _scatter(int n, int* odata, const int* idata, const int* scan, c
     odata[address] = idata[index];
 }
 
-void sort(int n, int* odata, const int* idata, const int maxBitLength)
+void StreamCompaction::Radix::sort(int n, int* data, const int maxBitLength)
 {
     const unsigned numLayers = ilog2ceil(n);
     const unsigned paddedN = 1 << ilog2ceil(n);
@@ -81,7 +78,7 @@ void sort(int n, int* odata, const int* idata, const int maxBitLength)
     cudaMalloc((void**)&dev_scan, sizeof(int) * paddedN);
     checkCUDAError("CUDA malloc for device scan array failed.");
 
-    cudaMemcpy(dev_idata, idata, sizeof(int) * n, cudaMemcpyHostToDevice);
+    cudaMemcpy(dev_idata, data, sizeof(int) * n, cudaMemcpyHostToDevice);
     checkCUDAError("Memory copy from host idata to device array failed.");
 
     bool usingTimer = false;
@@ -110,13 +107,16 @@ void sort(int n, int* odata, const int* idata, const int maxBitLength)
         timer().endGpuTimer();
     }
 
-    cudaMemcpy(odata, dev_idata, sizeof(int) * n, cudaMemcpyDeviceToHost);
-    checkCUDAError("Memory copy from device array to host odata failed.");
+    cudaMemcpy(data, dev_idata, sizeof(int) * n, cudaMemcpyDeviceToHost);
+    checkCUDAError("Memory copy from device array to host data failed.");
 
     cudaFree(dev_idata);
     cudaFree(dev_odata);
     cudaFree(dev_scan);
 }
 
-}  // namespace Radix
-}  // namespace StreamCompaction
+template<typename T>
+void StreamCompaction::Radix::sortByKey(int n, T* objects, const int* keys, const int maxBitLength)
+{
+    return;
+}

@@ -69,6 +69,14 @@ inline void genArray(int n, int* a, int maxval)
     }
 }
 
+inline void copyArray(int n, int* copy, const int* a)
+{
+    for (int i = 0; i < n; i++)
+    {
+        copy[i] = a[i];
+    }
+}
+
 inline void genConsecutiveArray(int n, int* a)
 {
     for (int i = 0; i < n; i++)
