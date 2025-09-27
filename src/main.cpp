@@ -153,7 +153,7 @@ int main()
 
     zeroArray(SIZE, c);
     printDesc("work-efficient scan, power-of-two, consecutive-valued array");
-    StreamCompaction::Efficient::scan(SIZE, c, consecutive);
+    StreamCompaction::Efficient::scanWrapper(SIZE, c, consecutive);
     printElapsedTime(StreamCompaction::Efficient::timer().getGpuElapsedTimeForPreviousOperation(),
                      "(CUDA Measured)");
     printArray(SIZE, c, true);
@@ -161,7 +161,7 @@ int main()
 
     zeroArray(SIZE, c);
     printDesc("work-efficient scan, power-of-two");
-    StreamCompaction::Efficient::scan(SIZE, c, a);
+    StreamCompaction::Efficient::scanWrapper(SIZE, c, a);
     printElapsedTime(StreamCompaction::Efficient::timer().getGpuElapsedTimeForPreviousOperation(),
                      "(CUDA Measured)");
     printArray(SIZE, c, true);
@@ -169,7 +169,7 @@ int main()
 
     zeroArray(SIZE, c);
     printDesc("work-efficient scan, non-power-of-two");
-    StreamCompaction::Efficient::scan(NPOT, c, a);
+    StreamCompaction::Efficient::scanWrapper(NPOT, c, a);
     printElapsedTime(StreamCompaction::Efficient::timer().getGpuElapsedTimeForPreviousOperation(),
                      "(CUDA Measured)");
     printArray(NPOT, c, true);

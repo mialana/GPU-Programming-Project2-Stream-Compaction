@@ -45,9 +45,15 @@ __global__ void kernel_efficientDownSweep(const int n, const int iter, int* scan
     }
 }
 
-// the inner operation of scan without timers and allocation
-void scanHelper(int numLayers, int paddedN, int* dev_scan)
+/*
+    the inner operation of scan without timers and allocation.
+    note: dev_scan should be pre-allocated to the padded power of two size
+*/
+void scan(int n, int* dev_scan)
 {
+    unsigned long long numLayers = ilog2ceil(n);
+    unsigned long long paddedN = 1 << ilog2ceil(n);
+
     int blocks;
     for (int i = 0; i <= numLayers - 1; i++)
     {
@@ -69,7 +75,7 @@ void scanHelper(int numLayers, int paddedN, int* dev_scan)
 /**
  * Performs prefix-sum (aka scan) on idata, storing the result into odata.
  */
-void scan(int n, int* odata, const int* idata)
+void scanWrapper(int n, int* odata, const int* idata)
 {
     unsigned long long numLayers = ilog2ceil(n);
     unsigned long long paddedN = 1 << ilog2ceil(n);
@@ -92,7 +98,7 @@ void scan(int n, int* odata, const int* idata)
         usingTimer = true;
     }
 
-    scanHelper(numLayers, paddedN, dev_scan);
+    scan(n, dev_scan);
 
     if (usingTimer)
     {
@@ -156,7 +162,7 @@ int compact(int n, int* odata, const int* idata)
     cudaMemcpy(bools, dev_bools, sizeof(int) * n, cudaMemcpyDeviceToHost);
     checkCUDAError("Memory copy from device bools to indices array failed.");
 
-    scan(n, indices, bools);
+    scanWrapper(n, indices, bools);
 
     cudaMemcpy(dev_indices, indices, sizeof(int) * n, cudaMemcpyHostToDevice);
     checkCUDAError("Memory copy from indices to device indices array failed.");

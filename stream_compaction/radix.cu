@@ -115,7 +115,7 @@ void StreamCompaction::Radix::sort(int n, int* odata, const int* idata, const in
         _split<<<blocks, BLOCK_SIZE>>>(n, dev_data[current], dev_scan, tgtBit);
 
         // Perform scan on the split results
-        Efficient::scanHelper(numLayers, paddedN, dev_scan);
+        Efficient::scan(n, dev_scan);
 
         // Scatter data based on the split results
         _computeScatterIndices<<<blocks, BLOCK_SIZE>>>(n,
@@ -145,6 +145,10 @@ void StreamCompaction::Radix::sort(int n, int* odata, const int* idata, const in
     cudaFree(dev_scan);
 }
 
+/*
+    the inner operation of sortByKey without timers and allocation.
+    note: dev_scan should be pre-allocated to the padded power of two size
+*/
 template<typename T>
 void StreamCompaction::Radix::sortByKey(int n,
                                         int* dev_keys[2],
@@ -166,7 +170,7 @@ void StreamCompaction::Radix::sortByKey(int n,
         _split<<<blocks, BLOCK_SIZE>>>(n, dev_keys[current], dev_scan, tgtBit);
 
         // Perform scan on the split results
-        Efficient::scanHelper(numLayers, paddedN, dev_scan);
+        Efficient::scan(n, dev_scan);
 
         // Scatter keys and rearrange objects based on the sorted keys
         _computeScatterIndices<<<blocks, BLOCK_SIZE>>>(n,
