@@ -59,7 +59,7 @@ __global__ void StreamCompaction::Radix::_scatter(
     odata[address] = idata[index];
 }
 
-void StreamCompaction::Radix::sort(int n, int* data, const int maxBitLength)
+void StreamCompaction::Radix::sort(int n, int* odata, const int* idata, const int maxBitLength)
 {
     const unsigned numLayers = ilog2ceil(n);
     const unsigned paddedN = 1 << ilog2ceil(n);
@@ -78,7 +78,7 @@ void StreamCompaction::Radix::sort(int n, int* data, const int maxBitLength)
     checkCUDAError("CUDA malloc for device scan array failed.");
 
     // Copy input data to device
-    cudaMemcpy(dev_data[0], data, sizeof(int) * n, cudaMemcpyHostToDevice);
+    cudaMemcpy(dev_data[0], idata, sizeof(int) * n, cudaMemcpyHostToDevice);
     checkCUDAError("Memory copy from host data to device array failed.");
 
     bool usingTimer = false;
@@ -101,7 +101,11 @@ void StreamCompaction::Radix::sort(int n, int* data, const int maxBitLength)
         Efficient::scanHelper(numLayers, paddedN, dev_scan);
 
         // Scatter data based on the split results
-        _scatter<<<blocks, BLOCK_SIZE>>>(n, dev_data[1 - current], dev_data[current], dev_scan, tgtBit);
+        _scatter<<<blocks, BLOCK_SIZE>>>(n,
+                                         dev_data[1 - current],
+                                         dev_data[current],
+                                         dev_scan,
+                                         tgtBit);
 
         // Swap buffers (ping-pong)
         current = 1 - current;
@@ -113,7 +117,7 @@ void StreamCompaction::Radix::sort(int n, int* data, const int maxBitLength)
     }
 
     // Copy sorted data back to host
-    cudaMemcpy(data, dev_data[current], sizeof(int) * n, cudaMemcpyDeviceToHost);
+    cudaMemcpy(odata, dev_data[current], sizeof(int) * n, cudaMemcpyDeviceToHost);
     checkCUDAError("Memory copy from device array to host data failed.");
 
     // Free device memory
@@ -123,14 +127,15 @@ void StreamCompaction::Radix::sort(int n, int* data, const int maxBitLength)
 }
 
 template<typename T>
-void StreamCompaction::Radix::sortByKey(int n, T* objects, const int* keys, const int maxBitLength)
+void StreamCompaction::Radix::sortByKey(
+    int n, int* outKeys, T* outValues, const int* keys, const T* values, const int maxBitLength)
 {
     const unsigned numLayers = ilog2ceil(n);
     const unsigned paddedN = 1 << ilog2ceil(n);
 
     // Allocate device memory for keys, objects, and scan
     int* dev_keys[2];
-    T* dev_objects[2];
+    T* dev_values[2];
     int* dev_scan;
 
     cudaMalloc((void**)&dev_keys[0], sizeof(int) * n);
@@ -139,10 +144,10 @@ void StreamCompaction::Radix::sortByKey(int n, T* objects, const int* keys, cons
     cudaMalloc((void**)&dev_keys[1], sizeof(int) * n);
     checkCUDAError("CUDA malloc for temporary keys array failed.");
 
-    cudaMalloc((void**)&dev_objects[0], sizeof(T) * n);
+    cudaMalloc((void**)&dev_values[0], sizeof(T) * n);
     checkCUDAError("CUDA malloc for device objects array failed.");
 
-    cudaMalloc((void**)&dev_objects[1], sizeof(T) * n);
+    cudaMalloc((void**)&dev_values[1], sizeof(T) * n);
     checkCUDAError("CUDA malloc for temporary objects array failed.");
 
     cudaMalloc((void**)&dev_scan, sizeof(int) * paddedN);
@@ -152,8 +157,8 @@ void StreamCompaction::Radix::sortByKey(int n, T* objects, const int* keys, cons
     cudaMemcpy(dev_keys[0], keys, sizeof(int) * n, cudaMemcpyHostToDevice);
     checkCUDAError("Memory copy from host keys to device array failed.");
 
-    cudaMemcpy(dev_objects[0], objects, sizeof(T) * n, cudaMemcpyHostToDevice);
-    checkCUDAError("Memory copy from host objects to device array failed.");
+    cudaMemcpy(dev_values[0], values, sizeof(T) * n, cudaMemcpyHostToDevice);
+    checkCUDAError("Memory copy from host values to device array failed.");
 
     int current = 0;  // Index to track the current buffer (ping-pong)
 
@@ -168,21 +173,34 @@ void StreamCompaction::Radix::sortByKey(int n, T* objects, const int* keys, cons
         Efficient::scanHelper(numLayers, paddedN, dev_scan);
 
         // Scatter keys and rearrange objects based on the sorted keys
-        _scatter<<<blocks, BLOCK_SIZE>>>(n, dev_keys[1 - current], dev_keys[current], dev_scan, tgtBit);
-        _scatter<<<blocks, BLOCK_SIZE>>>(n, dev_objects[1 - current], dev_objects[current], dev_scan, tgtBit);
+        _scatter<<<blocks, BLOCK_SIZE>>>(n,
+                                         dev_keys[1 - current],
+                                         dev_keys[current],
+                                         dev_scan,
+                                         tgtBit);
+        _scatter<<<blocks, BLOCK_SIZE>>>(n,
+                                         dev_values[1 - current],
+                                         dev_values[current],
+                                         dev_scan,
+                                         tgtBit);
 
         // Swap buffers (ping-pong)
         current = 1 - current;
     }
 
-    // Copy sorted objects back to host
-    cudaMemcpy(objects, dev_objects[current], sizeof(T) * n, cudaMemcpyDeviceToHost);
+    cudaMemcpy(outKeys, dev_keys[current], sizeof(int) * n, cudaMemcpyDeviceToHost);
+
+    // Copy sorted values back to host
+    cudaMemcpy(outValues, dev_values[current], sizeof(T) * n, cudaMemcpyDeviceToHost);
     checkCUDAError("Memory copy from device objects array to host failed.");
 
     // Free device memory
     cudaFree(dev_keys[0]);
     cudaFree(dev_keys[1]);
-    cudaFree(dev_objects[0]);
-    cudaFree(dev_objects[1]);
+    cudaFree(dev_values[0]);
+    cudaFree(dev_values[1]);
     cudaFree(dev_scan);
 }
+
+template void StreamCompaction::Radix::sortByKey<int>(
+    int n, int* outKeys, int* outValues, const int* keys, const int* values, const int maxBitLength);

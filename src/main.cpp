@@ -17,12 +17,16 @@
 // use during development with `#if !SKIP_UNIMPLEMENTED` preprocessor at desired skip point
 #define SKIP_UNIMPLEMENTED 1
 
-const int SIZE = 1 << 24;   // feel free to change the size of array
+const int SIZE = 1 << 3;   // feel free to change the size of array
 const int NPOT = SIZE - 3;  // Non-Power-Of-Two
 
 int* a = new int[SIZE];
 int* b = new int[SIZE];
 int* c = new int[SIZE];
+int* d = new int[SIZE];
+int* e = new int[SIZE];
+
+int* values = new int[SIZE];
 
 int* consecutive = new int[SIZE];  // use to test without randomness
 int* consecutiveOut = new int[SIZE];
@@ -48,9 +52,14 @@ int main()
     printArray(SIZE, consecutiveOut, true);
 
     printDesc("a array (input)");
-    genArray(SIZE - 1, a, 50);  // Leave a 0 at the end to test that edge case
+    genArray(SIZE - 1, a, 50, 0);  // Leave a 0 at the end to test that edge case
     a[SIZE - 1] = 0;
     printArray(SIZE, a, true);
+
+    printDesc("values array (input)");
+    genArray(SIZE - 1, values, 50, 1000);  // Leave a 0 at the end to test that edge case
+    values[SIZE - 1] = 0;
+    printArray(SIZE, values, true);
 
     printf("\n");
     printf("*****************************\n");
@@ -64,15 +73,41 @@ int main()
                      "(std::chrono Measured)");
     printArray(SIZE, b, true);
 
-    copyArray(SIZE, c, a); // want to do in-place
+   zeroArray(SIZE, c); // want to do in-place
     printDesc("radix sort, power-of-two");
-    StreamCompaction::Radix::sort(SIZE, c, 6);
+    StreamCompaction::Radix::sort(SIZE, c, a, 6);
 
     printElapsedTime(StreamCompaction::Radix::timer().getGpuElapsedTimeForPreviousOperation(),
                      "(std::chrono Measured)");
     printArray(SIZE, c, true);
 
     printCmpResult(SIZE, b, c);
+
+    zeroArray(SIZE, b);
+    zeroArray(SIZE, c);
+    zeroArray(SIZE, d);
+    zeroArray(SIZE, e);
+
+    printDesc("THRUST radix sort by key, power-of-two");
+    StreamCompaction::Thrust::radixSortByKey(SIZE, b, c, a, values);
+    printElapsedTime(StreamCompaction::Thrust::timer().getGpuElapsedTimeForPreviousOperation(),
+                     "(std::chrono Measured)");
+    printArray(SIZE, b, true);
+    printArray(SIZE, c, true);
+
+    printDesc("custom radix sort by key, power-of-two");
+    StreamCompaction::Radix::sortByKey(SIZE, d, e, a, values, 6);
+
+    printElapsedTime(StreamCompaction::Radix::timer().getGpuElapsedTimeForPreviousOperation(),
+                     "(std::chrono Measured)");
+    printArray(SIZE, d, true);
+    printArray(SIZE, e, true);
+
+    printDesc("Sorted keys array comparison");
+    printCmpResult(SIZE, b, d);
+
+    printDesc("Sorted values array comparison");
+    printCmpResult(SIZE, c, e);
 
     printf("*****************************\n");
 
@@ -163,7 +198,7 @@ int main()
 
     // Compaction tests
 
-    genArray(SIZE - 1, a, 4);  // Leave a 0 at the end to test that edge case
+    genArray(SIZE - 1, a, 4, 0);  // Leave a 0 at the end to test that edge case
     a[SIZE - 1] = 0;
     printArray(SIZE, a, true);
 

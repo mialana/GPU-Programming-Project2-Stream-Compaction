@@ -63,11 +63,11 @@ void radixSort(int n, int* o_data, const int* i_data)
     thrust::copy(d_copy.begin(), d_copy.end(), o_data);
 }
 
-void radixSortByKey(int n, int* keys, int* values)
+void radixSortByKey(int n, int* out_keys, int* out_values, const int* in_keys, const int* in_values)
 {
     // Wrap raw pointers with Thrust device pointers
-    thrust::device_vector<int> d_keys(keys, keys + n);
-    thrust::device_vector<int> d_values(values, values + n);
+    thrust::device_vector<int> d_keys(in_keys, in_keys + n);
+    thrust::device_vector<int> d_values(in_values, in_values + n);
 
     bool usingTimer = false;
     if (!timer().gpu_timer_started)
@@ -85,8 +85,8 @@ void radixSortByKey(int n, int* keys, int* values)
     }
 
     // Copy sorted keys and values back to host
-    thrust::copy(d_keys.begin(), d_keys.end(), keys);
-    thrust::copy(d_values.begin(), d_values.end(), values);
+    thrust::copy(d_keys.begin(), d_keys.end(), out_keys);
+    thrust::copy(d_values.begin(), d_values.end(), out_values);
 }
 }  // namespace Thrust
 }  // namespace StreamCompaction

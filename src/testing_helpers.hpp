@@ -59,9 +59,9 @@ inline void onesArray(int n, int* a)
     }
 }
 
-inline void genArray(int n, int* a, int maxval)
+inline void genArray(int n, int* a, int maxval, float offset)
 {
-    srand(time(nullptr));
+    srand(time(nullptr) + offset);
 
     for (int i = 0; i < n; i++)
     {
