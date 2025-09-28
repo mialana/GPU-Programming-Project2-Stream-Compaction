@@ -15,21 +15,33 @@ PerformanceTimer& timer()
     return timer;
 }
 
-__global__ void kernel_efficientUpSweep(const unsigned long long paddedN, int* scan)
+// iter = d
+__global__ void kernel_efficientUpSweep(const unsigned long long paddedN,
+                                        const int iter,
+                                        const int stride,
+                                        const int prevStride,
+                                        int* scan)
 {
-    int index = blockIdx.x * blockDim.x + threadIdx.x;  // 0, 1, 2, 3... (like normal)
+    int strideIdx = blockIdx.x * blockDim.x + threadIdx.x;  // 0, 1, 2, 3... (like normal)
+                                                            // but this is not target elem index
 
-    unsigned long long first = index << 1;              // first is index * 2
-    unsigned long long second = first + 1;
+    unsigned long long strideStart = strideIdx * stride; // index where this stride starts
 
-    if (second > paddedN - 1)
+    // last index in stride. accumulated value of stride always goes here
+    unsigned long long accumulatorIdx = strideStart + stride - 1;
+
+    if (accumulatorIdx >= paddedN)
     {
         return;
     }
 
-    // __shared__ int arr[BLOCK_SIZE];
+    int accumulator = scan[accumulatorIdx]; // pre-fetch accumulator's value
 
-    scan[index] = scan[first] + scan[second];
+    // this new stride has swallowed two strides total
+    // siblingIdx is the index of the other stride that now no longer exists
+    unsigned long long siblingIdx = strideStart + prevStride - 1; // doesn't depend on accumulator
+
+    scan[accumulatorIdx] = accumulator + scan[siblingIdx];
 }
 
 __global__ void kernel_efficientDownSweep(const int n, const int iter, int* scan)
@@ -58,14 +70,17 @@ void scan(int n, int* dev_scan)
     int numLayers = ilog2ceil(n);
     unsigned long long paddedN = 1 << numLayers;  // pad to nearest power of 2
 
-    int currN = paddedN;  // essentially the amount of indices that are accumulated into 1 at this iter
+    int prevStride = 1;
+    int stride = 2;  // essentially the amount of indices that are accumulated into 1 at this iter
     for (int iter = 0; iter < numLayers; iter++)
     {
-        int blocks = divup(currN, BLOCK_SIZE);
-        kernel_efficientUpSweep<<<blocks, BLOCK_SIZE>>>(currN, dev_scan);
+        // paddedN >> (iter + 1) == paddedN / (iter + 2) = the number of active threads in this iter
+        int blocks = divup(paddedN >> (iter + 1), BLOCK_SIZE);
+        kernel_efficientUpSweep<<<blocks, BLOCK_SIZE>>>(paddedN, iter, stride, prevStride, dev_scan);
         checkCUDAError("Perform Work-Efficient Scan Up Sweep Iteration CUDA kernel failed.");
 
-        currN = currN >> 1;  // n, n/2, n/4, n/8...
+        prevStride = stride;
+        stride = stride << 1;  // 1, 2, 4, 8, 16, ...
     }
 
     Common::kernel_setDeviceArrayValue<<<1, 1>>>(dev_scan, paddedN - 1, 0);

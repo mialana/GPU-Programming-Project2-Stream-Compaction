@@ -310,8 +310,6 @@ int main()
     genConsecutiveArray(SIZE, consecutive);
     printArray(SIZE, consecutive, true);
 
-    a = consecutive;
-
     doScanTests();
 
     // doConsecutiveTests();
