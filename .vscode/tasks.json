@@ -13,7 +13,7 @@
             "problemMatcher": ["$nvcc"],
             "presentation": {
                 "panel": "dedicated",
-                "showReuseMessage": false,
+                "showReuseMessage": true,
                 "clear": false,
                 "echo": true,
                 "focus": false

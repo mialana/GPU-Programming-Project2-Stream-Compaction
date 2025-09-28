@@ -33,6 +33,8 @@ inline int ilog2(int x)
     return lg;
 }
 
+// calculates smallest possible integer k such that 2^k >= x
+// subtracts x from 1 in the case that we already have a power of 2
 inline int ilog2ceil(int x)
 {
     return x == 1 ? 0 : ilog2(x - 1) + 1;

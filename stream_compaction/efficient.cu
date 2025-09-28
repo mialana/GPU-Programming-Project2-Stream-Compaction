@@ -15,18 +15,21 @@ PerformanceTimer& timer()
     return timer;
 }
 
-__global__ void kernel_efficientUpSweep(const int n, const int iter, int* scan)
+__global__ void kernel_efficientUpSweep(const unsigned long long paddedN, int* scan)
 {
-    int iterTarget = 1 << (iter + 1);
-    int iterFactor = 1 << iter;
+    int index = blockIdx.x * blockDim.x + threadIdx.x;  // 0, 1, 2, 3... (like normal)
 
-    unsigned long long index = blockIdx.x * blockDim.x + threadIdx.x;  // allow to exceed 32-bit
-    index *= iterTarget;
+    unsigned long long first = index << 1;              // first is index * 2
+    unsigned long long second = first + 1;
 
-    if (index + iterTarget - 1 < n)
+    if (second > paddedN - 1)
     {
-        scan[index + iterTarget - 1] += scan[index + iterFactor - 1];
+        return;
     }
+
+    // __shared__ int arr[BLOCK_SIZE];
+
+    scan[index] = scan[first] + scan[second];
 }
 
 __global__ void kernel_efficientDownSweep(const int n, const int iter, int* scan)
@@ -51,26 +54,31 @@ __global__ void kernel_efficientDownSweep(const int n, const int iter, int* scan
 */
 void scan(int n, int* dev_scan)
 {
-    unsigned long long numLayers = ilog2ceil(n);
-    unsigned long long paddedN = 1 << ilog2ceil(n);
+    // unsigned long long numLayers = ilog2ceil(n);
+    int numLayers = ilog2ceil(n);
+    unsigned long long paddedN = 1 << numLayers;  // pad to nearest power of 2
 
-    int blocks;
-    for (int i = 0; i <= numLayers - 1; i++)
+    int currN = paddedN;  // essentially the amount of indices that are accumulated into 1 at this iter
+    for (int iter = 0; iter < numLayers; iter++)
     {
-        blocks = divup(paddedN / (1 << (i + 1)), BLOCK_SIZE);
-        kernel_efficientUpSweep<<<blocks, BLOCK_SIZE>>>(paddedN, i, dev_scan);
+        int blocks = divup(currN, BLOCK_SIZE);
+        kernel_efficientUpSweep<<<blocks, BLOCK_SIZE>>>(currN, dev_scan);
         checkCUDAError("Perform Work-Efficient Scan Up Sweep Iteration CUDA kernel failed.");
+
+        currN = currN >> 1;  // n, n/2, n/4, n/8...
     }
 
     Common::kernel_setDeviceArrayValue<<<1, 1>>>(dev_scan, paddedN - 1, 0);
 
     for (int i = numLayers - 1; i >= 0; i--)
     {
-        blocks = divup(paddedN / (1 << (i + 1)), BLOCK_SIZE);
+        int blocks = divup(paddedN / (1 << (i + 1)), BLOCK_SIZE);
         kernel_efficientDownSweep<<<blocks, BLOCK_SIZE>>>(paddedN, i, dev_scan);
         checkCUDAError("Perform Work-Efficient Scan Down Sweep Iteration CUDA kernel failed.");
     }
 }
+
+/************************************************************************************************ */
 
 /**
  * Performs prefix-sum (aka scan) on idata, storing the result into odata.
