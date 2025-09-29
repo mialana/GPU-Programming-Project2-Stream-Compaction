@@ -12,6 +12,11 @@ PerformanceTimer& StreamCompaction::Shared::timer()
     return timer;
 }
 
+__device__ __host__ int _offset(int idx)
+{
+    return idx + CONFLICT_FREE_OFFSET(idx);
+}
+
 __global__ void kernel_scanIntraBlockShared(const unsigned long long paddedN,
                                             const int* idata,
                                             int* odata,
@@ -30,9 +35,11 @@ __global__ void kernel_scanIntraBlockShared(const unsigned long long paddedN,
 
     // global memory is read from in coalesced fashion
     // ensure some threads do not return early without zero-padding the shared matrix
-    mat[threadOffset] = (globalThreadIdx < paddedN) ? idata[blockOffset + threadOffset] : 0;
-    mat[threadOffset + 1] = (globalThreadIdx + 1 < paddedN) ? idata[blockOffset + threadOffset + 1]
-                                                            : 0;
+    mat[_offset(threadOffset)] = (globalThreadIdx < paddedN) ? idata[blockOffset + threadOffset]
+                                                             : 0;
+    mat[_offset(threadOffset + 1)] = (globalThreadIdx + 1 < paddedN)
+                                         ? idata[blockOffset + threadOffset + 1]
+                                         : 0;
 
     // which stride each child is reponsible for -- constant per thread
     // in reality, it is one stride higher than expected, but that's due to -1
@@ -50,7 +57,7 @@ __global__ void kernel_scanIntraBlockShared(const unsigned long long paddedN,
             int firstIdx = strideIdx_firstChild * STRIDE - 1;
             int secondIdx = strideIdx_secondChild * STRIDE - 1;
 
-            mat[secondIdx] += mat[firstIdx];
+            mat[_offset(secondIdx)] += mat[_offset(firstIdx)];
         }
 
         STRIDE *= 2;
@@ -60,8 +67,8 @@ __global__ void kernel_scanIntraBlockShared(const unsigned long long paddedN,
 
     if (tid == 0)
     {
-        blockSums[blockIdx.x] = mat[blockDim.x * 2 - 1];  // write accumulated val of block
-        mat[tileSize - 1] = 0;                            // clear last element
+        blockSums[blockIdx.x] = mat[_offset(tileSize - 1)];  // write accumulated val of block
+        mat[_offset(tileSize - 1)] = 0;                      // clear last element
     }
 
     for (int activeThreads = 1; activeThreads < tileSize; activeThreads <<= 1)
@@ -74,6 +81,8 @@ __global__ void kernel_scanIntraBlockShared(const unsigned long long paddedN,
             int firstIdx = strideIdx_firstChild * STRIDE - 1;
             int secondIdx = strideIdx_secondChild * STRIDE - 1;
 
+            firstIdx = _offset(firstIdx);
+            secondIdx = _offset(secondIdx);
             int temp = mat[firstIdx];
             mat[firstIdx] = mat[secondIdx];
             mat[secondIdx] += temp;
@@ -83,12 +92,12 @@ __global__ void kernel_scanIntraBlockShared(const unsigned long long paddedN,
     __syncthreads();  // this time the last __syncthreads() wasn't called
 
     if (globalThreadIdx < paddedN)
-    {  // only fill if less than paddedN
-        odata[blockOffset + threadOffset] = mat[threadOffset];
+    {
+        odata[blockOffset + threadOffset] = mat[_offset(threadOffset)];
     }
     if (globalThreadIdx + 1 < paddedN)
     {
-        odata[blockOffset + threadOffset + 1] = mat[threadOffset + 1];
+        odata[blockOffset + threadOffset + 1] = mat[_offset(threadOffset + 1)];
     }
 }
 
@@ -127,10 +136,8 @@ void StreamCompaction::Shared::scan(
     int numBlocks = divup(paddedN, blockSpan);
 
     // numBlocks, numThreads, shared mem size
-    kernel_scanIntraBlockShared<<<numBlocks, blockSize, blockSpan * sizeof(int)>>>(paddedN,
-                                                                                       dev_idata,
-                                                                                       dev_odata,
-                                                                                       dev_blockSums);
+    kernel_scanIntraBlockShared<<<numBlocks, blockSize, _offset(blockSpan) * sizeof(int)>>>(
+        paddedN, dev_idata, dev_odata, dev_blockSums);
 
     // use Efficient to scan blockSums
     StreamCompaction::Efficient::scan(numBlocks, dev_blockSums, blockSize);

@@ -18,7 +18,7 @@
 // use during development with `#if !SKIP_UNIMPLEMENTED` preprocessor at desired skip point
 #define SKIP_UNIMPLEMENTED 1
 
-const int SIZE = 1 << 18;    // feel free to change the size of array
+const int SIZE = 1 << 28;   // feel free to change the size of array
 const int NPOT = SIZE - 3;  // Non-Power-Of-Two
 
 int* a = new int[SIZE];
@@ -36,19 +36,26 @@ void getDeviceProperties()
 {
     int deviceCount;
     cudaError_t err = cudaGetDeviceCount(&deviceCount);
-    if (err != cudaSuccess) {
+    if (err != cudaSuccess)
+    {
         fprintf(stderr, "Failed to get device count: %s\n", cudaGetErrorString(err));
     }
 
-    if (deviceCount == 0) {
+    if (deviceCount == 0)
+    {
         printf("No CUDA-capable devices found.\n");
     }
 
-    for (int i = 0; i < deviceCount; ++i) {
+    for (int i = 0; i < deviceCount; ++i)
+    {
         cudaDeviceProp deviceProp;
         err = cudaGetDeviceProperties(&deviceProp, i);
-        if (err != cudaSuccess) {
-            fprintf(stderr, "Failed to get properties for device %d: %s\n", i, cudaGetErrorString(err));
+        if (err != cudaSuccess)
+        {
+            fprintf(stderr,
+                    "Failed to get properties for device %d: %s\n",
+                    i,
+                    cudaGetErrorString(err));
             continue;
         }
 
@@ -62,7 +69,6 @@ void getDeviceProperties()
         printf("Warp Size: %d\n", deviceProp.warpSize);
         printf("\n");
     }
-
 }
 
 void doScanTests()
@@ -145,6 +151,8 @@ void doScanTests()
     printArray(SIZE, c, true);
     printCmpResult(SIZE, b, c);
 
+#if !SKIP_UNIMPLEMENTED
+
     zeroArray(SIZE, c);
     printDesc("work-efficient shared scan, non-power-of-two");
     StreamCompaction::Shared::scanWrapper(NPOT, c, a);
@@ -152,6 +160,8 @@ void doScanTests()
                      "(CUDA Measured)");
     printArray(NPOT, c, true);
     printCmpResult(NPOT, b, c);
+
+#endif
 
     zeroArray(SIZE, c);
     printDesc("thrust scan, power-of-two");
