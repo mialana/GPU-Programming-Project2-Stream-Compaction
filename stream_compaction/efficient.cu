@@ -15,9 +15,7 @@ PerformanceTimer& timer()
     return timer;
 }
 
-// iter = d
 __global__ void kernel_efficientUpSweep(const unsigned long long paddedN,
-                                        const int iter,
                                         const int stride,
                                         const int prevStride,
                                         int* scan)
@@ -25,7 +23,7 @@ __global__ void kernel_efficientUpSweep(const unsigned long long paddedN,
     int strideIdx = blockIdx.x * blockDim.x + threadIdx.x;  // 0, 1, 2, 3... (like normal)
                                                             // but this is not target elem index
 
-    unsigned long long strideStart = strideIdx * stride; // index where this stride starts
+    unsigned long long strideStart = strideIdx * stride;    // index where this stride starts
 
     // last index in stride. accumulated value of stride always goes here
     unsigned long long accumulatorIdx = strideStart + stride - 1;
@@ -35,29 +33,51 @@ __global__ void kernel_efficientUpSweep(const unsigned long long paddedN,
         return;
     }
 
-    int accumulator = scan[accumulatorIdx]; // pre-fetch accumulator's value
+    int accumulator = scan[accumulatorIdx];  // pre-fetch accumulator's value
 
     // this new stride has swallowed two strides total
     // siblingIdx is the index of the other stride that now no longer exists
-    unsigned long long siblingIdx = strideStart + prevStride - 1; // doesn't depend on accumulator
+    unsigned long long siblingIdx = strideStart + prevStride - 1;  // doesn't depend on accumulator
 
     scan[accumulatorIdx] = accumulator + scan[siblingIdx];
 }
 
-__global__ void kernel_efficientDownSweep(const int n, const int iter, int* scan)
+__global__ void kernel_efficientDownSweep(const unsigned long long paddedN,
+                                          const int STRIDE,
+                                          const int nextSTRIDE, // nextStride == (stride / 2)
+                                          int* scan)
 {
-    int iterTarget = 1 << (iter + 1);
-    int iterFactor = 1 << iter;
+    int strideIdx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    unsigned long long index = blockIdx.x * blockDim.x + threadIdx.x;
-    index = index * iterTarget;
+    unsigned long long strideStart = strideIdx * STRIDE;
 
-    if (index + iterTarget - 1 < n)
+    unsigned long long rightChildIdx = strideStart + STRIDE - 1;
+    if (rightChildIdx >= paddedN)
     {
-        int leftChild = scan[index + iterFactor - 1];
-        scan[index + iterFactor - 1] = scan[index + iterTarget - 1];
-        scan[index + iterTarget - 1] += leftChild;
+        return;
     }
+
+    int rightChild = scan[rightChildIdx];
+
+    // leftChild and rightChild are nextSTRIDE indices apart
+    unsigned long long leftChildIdx = strideStart + nextSTRIDE - 1;
+    int leftChild = scan[leftChildIdx]; // does not depend on first memory read
+
+    // give left child right child's value
+    // its value has not changed since the end of upsweep
+    // it has it easier than right child.
+    // on this update it now has accumulated vals of all strides of size nextSTRIDE, besides its own
+    scan[leftChildIdx] = rightChild; // depends on first read, but not second
+
+    // right child currently contains accumulated vals of all strides of size STRIDE besodes its own
+    // adding the left child, which only contains values of one stride of size nextSTRIDE
+    // means that right child now also has accumulated vals of all strides of size nextSTRIDE
+    // besides its own (same status as leftChild)
+    scan[rightChildIdx] = rightChild + leftChild; // memory writes do not depend on each other
+
+    // summary: at each layer, the updated elements get the value of all strides of size nextSTRIDE
+    // besides its own.
+    // so when nextSTRIDE == 1, then this element is done, and so are our iterations
 }
 
 /*
@@ -70,26 +90,36 @@ void scan(int n, int* dev_scan)
     int numLayers = ilog2ceil(n);
     unsigned long long paddedN = 1 << numLayers;  // pad to nearest power of 2
 
-    int prevStride = 1;
+    int prevStride = 1;                           // 1, 2, 4, 8, ... n/2
     int stride = 2;  // essentially the amount of indices that are accumulated into 1 at this iter
+                     // 2, 4, 8, ... n
     for (int iter = 0; iter < numLayers; iter++)
     {
         // paddedN >> (iter + 1) == paddedN / (iter + 2) = the number of active threads in this iter
+        // n/2, n/4, n/8, ... 1
         int blocks = divup(paddedN >> (iter + 1), BLOCK_SIZE);
-        kernel_efficientUpSweep<<<blocks, BLOCK_SIZE>>>(paddedN, iter, stride, prevStride, dev_scan);
+        kernel_efficientUpSweep<<<blocks, BLOCK_SIZE>>>(paddedN, stride, prevStride, dev_scan);
         checkCUDAError("Perform Work-Efficient Scan Up Sweep Iteration CUDA kernel failed.");
 
         prevStride = stride;
-        stride = stride << 1;  // 1, 2, 4, 8, 16, ...
+        stride = stride <<= 1;
     }
 
-    Common::kernel_setDeviceArrayValue<<<1, 1>>>(dev_scan, paddedN - 1, 0);
+    // set last value of dev_scan to 0
+    int replacement = 0;
+    cudaMemcpy(&dev_scan[paddedN - 1], &replacement, sizeof(int), cudaMemcpyHostToDevice);
 
-    for (int i = numLayers - 1; i >= 0; i--)
+    stride = paddedN;               // n, n/2, n/4, ... 2
+    int nextStride = paddedN >> 1;  // n/2, n/4, ... 1
+    for (int iter = numLayers; iter > 0; iter--)
     {
-        int blocks = divup(paddedN / (1 << (i + 1)), BLOCK_SIZE);
-        kernel_efficientDownSweep<<<blocks, BLOCK_SIZE>>>(paddedN, i, dev_scan);
+        // paddedN >> iter == number of active threads in this iter. 1, 2, 4, 8, ... n/2
+        int blocks = divup(paddedN >> iter, BLOCK_SIZE);
+        kernel_efficientDownSweep<<<blocks, BLOCK_SIZE>>>(paddedN, stride, nextStride, dev_scan);
         checkCUDAError("Perform Work-Efficient Scan Down Sweep Iteration CUDA kernel failed.");
+
+        stride = nextStride;
+        nextStride >>= 1;  // n/2, n/4, n/8, n/16, ...
     }
 }
 

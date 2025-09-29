@@ -17,7 +17,7 @@
 // use during development with `#if !SKIP_UNIMPLEMENTED` preprocessor at desired skip point
 #define SKIP_UNIMPLEMENTED 1
 
-const int SIZE = 1 << 4;    // feel free to change the size of array
+const int SIZE = 1 << 24;    // feel free to change the size of array
 const int NPOT = SIZE - 3;  // Non-Power-Of-Two
 
 int* a = new int[SIZE];
@@ -309,6 +309,8 @@ int main()
     printDesc("consecutive array (input)");
     genConsecutiveArray(SIZE, consecutive);
     printArray(SIZE, consecutive, true);
+
+    // a = consecutive;
 
     doScanTests();
 
