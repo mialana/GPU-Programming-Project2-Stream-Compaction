@@ -17,10 +17,10 @@ __global__ void _computeScatterIndices(int n, int* odata, const int* idata, cons
 template<typename T>
 __global__ void _scatter(int n, T* odata, const T* idata, const int* addresses);
 
-void sort(int n, int* odata, const int* idata, const int maxBitLength);
+void sort(int n, int* odata, const int* idata, const int maxBitLength, const int blockSize);
 
 template<typename T>
-void sortByKey(int n, int* dev_keys[2], T* dev_values[2], int* dev_scan, int* dev_indices, const int maxBitLength);
+void sortByKey(int n, int* dev_keys[2], T* dev_values[2], int* dev_scan, int* dev_indices, const int maxBitLength, const int blockSize);
 
 template<typename T>
 void sortByKeyWrapper(

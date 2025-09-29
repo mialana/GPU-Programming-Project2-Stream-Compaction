@@ -72,7 +72,8 @@ __global__ void StreamCompaction::Radix::_scatter(int n,
     odata[address] = idata[index];  // Scatter the value to its new position
 }
 
-void StreamCompaction::Radix::sort(int n, int* odata, const int* idata, const int maxBitLength)
+void StreamCompaction::Radix::sort(
+    int n, int* odata, const int* idata, const int maxBitLength, const int blockSize)
 {
     const unsigned numLayers = ilog2ceil(n);
     const unsigned paddedN = 1 << ilog2ceil(n);
@@ -109,22 +110,22 @@ void StreamCompaction::Radix::sort(int n, int* odata, const int* idata, const in
 
     for (int tgtBit = 0; tgtBit < maxBitLength; tgtBit++)
     {
-        unsigned blocks = divup(n, BLOCK_SIZE);
+        unsigned blocks = divup(n, blockSize);
 
         // Split data into 0s and 1s based on the target bit
-        _split<<<blocks, BLOCK_SIZE>>>(n, dev_data[current], dev_scan, tgtBit);
+        _split<<<blocks, blockSize>>>(n, dev_data[current], dev_scan, tgtBit);
 
         // Perform scan on the split results
         Efficient::scan(n, dev_scan);
 
         // Scatter data based on the split results
-        _computeScatterIndices<<<blocks, BLOCK_SIZE>>>(n,
-                                                       dev_indices,
-                                                       dev_data[current],
-                                                       dev_scan,
-                                                       tgtBit);
+        _computeScatterIndices<<<blocks, blockSize>>>(n,
+                                                      dev_indices,
+                                                      dev_data[current],
+                                                      dev_scan,
+                                                      tgtBit);
 
-        _scatter<<<blocks, BLOCK_SIZE>>>(n, dev_data[1 - current], dev_data[current], dev_indices);
+        _scatter<<<blocks, blockSize>>>(n, dev_data[1 - current], dev_data[current], dev_indices);
 
         // Swap buffers (ping-pong)
         current = 1 - current;
@@ -155,7 +156,8 @@ void StreamCompaction::Radix::sortByKey(int n,
                                         T* dev_values[2],
                                         int* dev_scan,
                                         int* dev_indices,
-                                        const int maxBitLength)
+                                        const int maxBitLength,
+                                        const int blockSize)
 {
     const unsigned numLayers = ilog2ceil(n);
     const unsigned paddedN = 1 << ilog2ceil(n);
@@ -164,29 +166,29 @@ void StreamCompaction::Radix::sortByKey(int n,
 
     for (int tgtBit = 0; tgtBit < maxBitLength; tgtBit++)
     {
-        unsigned blocks = divup(n, BLOCK_SIZE);
+        unsigned blocks = divup(n, blockSize);
 
         // Split keys into 0s and 1s based on the target bit
-        _split<<<blocks, BLOCK_SIZE>>>(n, dev_keys[current], dev_scan, tgtBit);
+        _split<<<blocks, blockSize>>>(n, dev_keys[current], dev_scan, tgtBit);
 
         // Perform scan on the split results
         Efficient::scan(n, dev_scan);
 
         // Scatter keys and rearrange objects based on the sorted keys
-        _computeScatterIndices<<<blocks, BLOCK_SIZE>>>(n,
-                                                       dev_indices,
-                                                       dev_keys[current],
-                                                       dev_scan,
-                                                       tgtBit);
+        _computeScatterIndices<<<blocks, blockSize>>>(n,
+                                                      dev_indices,
+                                                      dev_keys[current],
+                                                      dev_scan,
+                                                      tgtBit);
 
         // Scatter keys based on the computed indices
-        _scatter<<<blocks, BLOCK_SIZE>>>(n, dev_keys[1 - current], dev_keys[current], dev_indices);
+        _scatter<<<blocks, blockSize>>>(n, dev_keys[1 - current], dev_keys[current], dev_indices);
 
         // Scatter values based on the computed indices
-        _scatter<<<blocks, BLOCK_SIZE>>>(n,
-                                         dev_values[1 - current],
-                                         dev_values[current],
-                                         dev_indices);
+        _scatter<<<blocks, blockSize>>>(n,
+                                        dev_values[1 - current],
+                                        dev_values[current],
+                                        dev_indices);
 
         // Swap buffers (ping-pong)
         current = 1 - current;
@@ -250,7 +252,7 @@ void StreamCompaction::Radix::sortByKeyWrapper(
     }
 
     // Perform internal sorting
-    sortByKey(n, dev_keys, dev_values, dev_scan, dev_indices, maxBitLength);
+    sortByKey(n, dev_keys, dev_values, dev_scan, dev_indices, maxBitLength, BLOCK_SIZE);
 
     if (usingTimer)
     {
@@ -275,14 +277,16 @@ template void StreamCompaction::Radix::sortByKey<int>(int n,
                                                       int* dev_values[2],
                                                       int* dev_scan,
                                                       int* dev_indices,
-                                                      const int maxBitLength);
+                                                      const int maxBitLength,
+                                                      const int blockSize);
 
 template void StreamCompaction::Radix::sortByKey<float>(int n,
                                                         int* dev_keys[2],
                                                         float* dev_values[2],
                                                         int* dev_scan,
                                                         int* dev_indices,
-                                                        const int maxBitLength);
+                                                        const int maxBitLength,
+                                                        const int blockSize);
 
 template void StreamCompaction::Radix::sortByKeyWrapper<int>(
     int n, int* outKeys, int* outValues, const int* keys, const int* values, const int maxBitLength);

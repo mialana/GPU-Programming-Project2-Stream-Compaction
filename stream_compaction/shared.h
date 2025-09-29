@@ -8,7 +8,7 @@ namespace Shared
 {
 StreamCompaction::Common::PerformanceTimer& timer();
 
-void scan(int n, int* dev_scan);
+void scan(int n, int* dev_idata, int* dev_odata, int* dev_blockSums, const int blockSize);
 
 void scanWrapper(int n, int* odata, const int* idata);
 

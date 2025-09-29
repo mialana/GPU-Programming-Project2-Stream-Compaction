@@ -18,7 +18,7 @@
 // use during development with `#if !SKIP_UNIMPLEMENTED` preprocessor at desired skip point
 #define SKIP_UNIMPLEMENTED 1
 
-const int SIZE = 1 << 4;    // feel free to change the size of array
+const int SIZE = 1 << 8;    // feel free to change the size of array
 const int NPOT = SIZE - 3;  // Non-Power-Of-Two
 
 int* a = new int[SIZE];
@@ -206,7 +206,7 @@ void doRadixSortTests()
 
     zeroArray(SIZE, c);  // want to do in-place
     printDesc("radix sort, power-of-two");
-    StreamCompaction::Radix::sort(SIZE, c, a, 6);
+    StreamCompaction::Radix::sort(SIZE, c, a, 6, BLOCK_SIZE);
 
     printElapsedTime(StreamCompaction::Radix::timer().getGpuElapsedTimeForPreviousOperation(),
                      "(std::chrono Measured)");

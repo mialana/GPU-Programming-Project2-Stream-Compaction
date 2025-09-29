@@ -3,148 +3,136 @@
 #include "common.h"
 #include "shared.h"
 
-namespace StreamCompaction
-{
-namespace Shared
-{
 using StreamCompaction::Common::PerformanceTimer;
 
-PerformanceTimer& timer()
+PerformanceTimer& StreamCompaction::Shared::timer()
 {
     static PerformanceTimer timer;
     return timer;
 }
 
-__global__ void kernel_efficientSharedUpSweep(const unsigned long long paddedN,
-                                              const int stride,
-                                              const int prevStride,
-                                              int* scan)
+__global__ void kernel_efficientScanShared(const unsigned long long paddedN,
+                                           const int* idata,
+                                           int* odata,
+                                           int* blockSums)
 {
-    int strideIdx = blockIdx.x * blockDim.x + threadIdx.x;  // 0, 1, 2, 3... (like normal)
-                                                            // but this is not target elem index
+    extern __shared__ int mat[];
 
-    unsigned long long strideStart = strideIdx * stride;    // index where this stride starts
+    const int tileSize = blockDim.x * 2;
 
-    // last index in stride. accumulated value of stride always goes here
-    unsigned long long accumulatorIdx = strideStart + stride - 1;
+    const int tid = threadIdx.x;
 
-    if (accumulatorIdx >= paddedN)
+    unsigned long long blockOffset = (blockIdx.x * blockDim.x) * 2;
+    int threadOffset = 2 * tid;  // first index this thread is responsible for
+
+    int globalThreadIdx = blockOffset + threadOffset;
+
+    // global memory is read from in coalesced fashion
+    // ensure some threads do not return early without zero-padding the shared matrix
+    mat[threadOffset] = (globalThreadIdx < paddedN) ? idata[blockOffset + threadOffset] : 0;
+    mat[threadOffset + 1] = (globalThreadIdx + 1 < paddedN) ? idata[blockOffset + threadOffset + 1]
+                                                            : 0;
+
+    // which stride each child is reponsible for -- constant per thread
+    // in reality, it is one stride higher than expected, but that's due to -1
+    const int strideIdx_firstChild = threadOffset + 1;
+    const int strideIdx_secondChild = threadOffset + 2;
+
+    int STRIDE = 1;  // 1, 2, 4, 8, 16, 32, ... tileSize
+    // activeThreads: n/2, n/4, n/8, ... 1
+    for (int activeThreads = tileSize >> 1; activeThreads > 0; activeThreads >>= 1)
     {
-        return;
+        __syncthreads();
+
+        if (tid < activeThreads)
+        {
+            int firstIdx = strideIdx_firstChild * STRIDE - 1;
+            int secondIdx = strideIdx_secondChild * STRIDE - 1;
+
+            mat[secondIdx] += mat[firstIdx];
+        }
+
+        STRIDE *= 2;
     }
 
-    int accumulator = scan[accumulatorIdx];  // pre-fetch accumulator's value
+    __syncthreads();
 
-    // this new stride has swallowed two strides total
-    // siblingIdx is the index of the other stride that now no longer exists
-    unsigned long long siblingIdx = strideStart + prevStride - 1;  // doesn't depend on accumulator
-
-    scan[accumulatorIdx] = accumulator + scan[siblingIdx];
-}
-
-__global__ void kernel_efficientSharedDownSweep(const unsigned long long paddedN,
-                                                const int STRIDE,
-                                                const int nextSTRIDE,  // nextStride == (stride / 2)
-                                                int* scan)
-{
-    int strideIdx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    unsigned long long strideStart = strideIdx * STRIDE;
-
-    unsigned long long rightChildIdx = strideStart + STRIDE - 1;
-    if (rightChildIdx >= paddedN)
+    if (tid == 0)
     {
-        return;
+        blockSums[blockIdx.x] = mat[blockDim.x * 2 - 1];  // write accumulated val of block
+        mat[tileSize - 1] = 0;                            // clear last element
     }
 
-    int rightChild = scan[rightChildIdx];
+    for (int activeThreads = 1; activeThreads < tileSize; activeThreads <<= 1)
+    {
+        STRIDE >>= 1;  // STRIDE ended at tileSize
+        __syncthreads();
 
-    // leftChild and rightChild are nextSTRIDE indices apart
-    unsigned long long leftChildIdx = strideStart + nextSTRIDE - 1;
-    int leftChild = scan[leftChildIdx];  // does not depend on first memory read
+        if (tid < activeThreads)
+        {
+            int firstIdx = strideIdx_firstChild * STRIDE - 1;
+            int secondIdx = strideIdx_secondChild * STRIDE - 1;
 
-    // give left child right child's value
-    // its value has not changed since the end of upsweep
-    // it has it easier than right child.
-    // on this update it now has accumulated vals of all strides of size nextSTRIDE, besides its own
-    scan[leftChildIdx] = rightChild;  // depends on first read, but not second
+            int temp = mat[firstIdx];
+            mat[firstIdx] = mat[secondIdx];
+            mat[secondIdx] += temp;
+        }
+    }
 
-    // right child currently contains accumulated vals of all strides of size STRIDE besodes its own
-    // adding the left child, which only contains values of one stride of size nextSTRIDE
-    // means that right child now also has accumulated vals of all strides of size nextSTRIDE
-    // besides its own (same status as leftChild)
-    scan[rightChildIdx] = rightChild + leftChild;  // memory writes do not depend on each other
+    __syncthreads();  // this time the last __syncthreads() wasn't called
 
-    // summary: at each layer, the updated elements get the value of all strides of size nextSTRIDE
-    // besides its own.
-    // so when nextSTRIDE == 1, then this element is done, and so are our iterations
+    if (globalThreadIdx < paddedN)
+    {  // only fill if less than paddedN
+        odata[blockOffset + threadOffset] = mat[threadOffset];
+    }
+    if (globalThreadIdx + 1 < paddedN)
+    {
+        odata[blockOffset + threadOffset + 1] = mat[threadOffset + 1];
+    }
 }
 
 /*
     the inner operation of scan without timers and allocation.
     note: dev_scan should be pre-allocated to the padded power of two size
 */
-void scan(int n, int* dev_scan)
+void StreamCompaction::Shared::scan(
+    int n, int* dev_idata, int* dev_odata, int* dev_blockSums, const int blockSize)
 {
     // unsigned long long numLayers = ilog2ceil(n);
     int numLayers = ilog2ceil(n);
     unsigned long long paddedN = 1 << numLayers;  // pad to nearest power of 2
 
-    int prevStride = 1;                           // 1, 2, 4, 8, ... n/2
-    int stride = 2;  // essentially the amount of indices that are accumulated into 1 at this iter
-                     // 2, 4, 8, ... n
-    for (int iter = 0; iter < numLayers; iter++)
-    {
-        // paddedN >> (iter + 1) == paddedN / (iter + 2) = the number of active threads in this iter
-        // n/2, n/4, n/8, ... 1
-        int blocks = divup(paddedN >> (iter + 1), BLOCK_SIZE);
-        kernel_efficientSharedUpSweep<<<blocks, BLOCK_SIZE>>>(paddedN, stride, prevStride, dev_scan);
-        checkCUDAError("Perform Work-Efficient Shared Scan Up Sweep Iteration CUDA kernel failed.");
-
-        prevStride = stride;
-        stride = stride <<= 1;
-    }
-
-    // set last value of dev_scan to 0
-    int replacement = 0;
-    cudaMemcpy(&dev_scan[paddedN - 1], &replacement, sizeof(int), cudaMemcpyHostToDevice);
-
-    stride = paddedN;               // n, n/2, n/4, ... 2
-    int nextStride = paddedN >> 1;  // n/2, n/4, ... 1
-    for (int iter = numLayers; iter > 0; iter--)
-    {
-        // paddedN >> iter == number of active threads in this iter. 1, 2, 4, 8, ... n/2
-        int blocks = divup(paddedN >> iter, BLOCK_SIZE);
-        kernel_efficientSharedDownSweep<<<blocks, BLOCK_SIZE>>>(paddedN,
-                                                                stride,
-                                                                nextStride,
-                                                                dev_scan);
-        checkCUDAError(
-            "Perform Work-Efficient Shared Scan Down Sweep Iteration CUDA kernel failed.");
-
-        stride = nextStride;
-        nextStride >>= 1;  // n/2, n/4, n/8, n/16, ...
-    }
+    kernel_efficientScanShared<<<divup(paddedN, 2 * blockSize), blockSize, blockSize * 2 * sizeof(int)>>>(
+        paddedN, dev_idata, dev_odata, dev_blockSums);
 }
-
-/************************************************************************************************ */
 
 /**
  * Performs prefix-sum (aka scan) on idata, storing the result into odata.
  */
-void scanWrapper(int n, int* odata, const int* idata)
+void StreamCompaction::Shared::scanWrapper(int n, int* odata, const int* idata)
 {
-    unsigned long long numLayers = ilog2ceil(n);
+    int numLayers = ilog2ceil(n);
     unsigned long long paddedN = 1 << ilog2ceil(n);
 
-    // create two device arrays
-    int* dev_scan;
+    int totalBlocks = divup(paddedN, BLOCK_SIZE);
 
-    cudaMalloc((void**)&dev_scan, sizeof(int) * paddedN);
+    // create two device arrays
+    int* dev_idata;
+    int* dev_odata;
+    int* dev_blockSums;
+
+    cudaMalloc((void**)&dev_idata, sizeof(int) * paddedN);
     checkCUDAError("CUDA malloc for scan array failed.");
 
-    cudaMemcpy(dev_scan, idata, sizeof(int) * n, cudaMemcpyHostToDevice);
-    checkCUDAError("Memory copy from input data to scan array failed.");
+    cudaMalloc((void**)&dev_odata, sizeof(int) * paddedN);
+    checkCUDAError("CUDA malloc for device out data failed.");
+
+    // create new array to store total sum of each block
+    cudaMalloc((void**)&dev_blockSums, sizeof(int) * totalBlocks);
+    checkCUDAError("CUDA malloc for block sums array failed.");
+
+    cudaMemcpy(dev_idata, idata, sizeof(int) * n, cudaMemcpyHostToDevice);
+    checkCUDAError("Memory copy from input data to device idata array failed.");
 
     cudaDeviceSynchronize();
 
@@ -155,87 +143,18 @@ void scanWrapper(int n, int* odata, const int* idata)
         usingTimer = true;
     }
 
-    scan(n, dev_scan);
+    StreamCompaction::Shared::scan(n, dev_idata, dev_odata, dev_blockSums, BLOCK_SIZE);
 
     if (usingTimer)
     {
         timer().endGpuTimer();
     }
 
-    cudaMemcpy(odata, dev_scan, sizeof(int) * n, cudaMemcpyDeviceToHost);
+    cudaMemcpy(odata, dev_odata, sizeof(int) * n, cudaMemcpyDeviceToHost);  // only copy n elements
 
-    cudaFree(dev_scan);  // can't forget memory leaks!
-}
-
-/**
- * Performs stream compaction on idata, storing the result into odata.
- * All zeroes are discarded.
- *
- * @param n      The number of elements in idata.
- * @param odata  The array into which to store elements.
- * @param idata  The array of elements to compact.
- * @returns      The number of elements remaining after compaction.
- */
-int compact(int n, int* odata, const int* idata)
-{
-    // TODO: these arrays are unnecessary. will optimize soon.
-
-    // create device arrays
-    int* dev_idata;
-    int* dev_odata;
-
-    int* dev_bools;
-    int* dev_indices;
-
-    cudaMalloc((void**)&dev_idata, sizeof(int) * n);
-    checkCUDAError("CUDA malloc for idata array failed.");
-
-    cudaMalloc((void**)&dev_odata, sizeof(int) * n);
-    checkCUDAError("CUDA malloc for odata array failed.");
-
-    cudaMalloc((void**)&dev_bools, sizeof(int) * n);
-    checkCUDAError("CUDA malloc for bools array failed.");
-
-    cudaMalloc((void**)&dev_indices, sizeof(int) * n);
-    checkCUDAError("CUDA malloc for indices array failed.");
-
-    cudaMemcpy(dev_idata, idata, sizeof(int) * n, cudaMemcpyHostToDevice);
-    checkCUDAError("Memory copy from input data to idata array failed.");
-    cudaMemcpy(dev_bools, odata, sizeof(int) * n, cudaMemcpyHostToDevice);
-    checkCUDAError("Memory copy from output data to odata array failed.");
-
-    cudaDeviceSynchronize();
-
-    int* indices = new int[n];  // create cpu side indices array
-    int* bools = new int[n];
-
-    timer().startGpuTimer();
-
-    int blocks = divup(n, BLOCK_SIZE);
-
-    // reuse dev_idata for bools
-    Common::kernMapToBoolean<<<blocks, BLOCK_SIZE>>>(n, dev_bools, dev_idata);
-
-    cudaMemcpy(bools, dev_bools, sizeof(int) * n, cudaMemcpyDeviceToHost);
-    checkCUDAError("Memory copy from device bools to indices array failed.");
-
-    scanWrapper(n, indices, bools);
-
-    cudaMemcpy(dev_indices, indices, sizeof(int) * n, cudaMemcpyHostToDevice);
-    checkCUDAError("Memory copy from indices to device indices array failed.");
-
-    Common::kernScatter<<<blocks, BLOCK_SIZE>>>(n, dev_odata, dev_idata, dev_bools, dev_indices);
-
-    timer().endGpuTimer();
-
-    cudaMemcpy(odata, dev_odata, sizeof(int) * n, cudaMemcpyDeviceToHost);
-
-    cudaFree(dev_idata);
+    cudaFree(dev_idata);  // can't forget memory leaks!
     cudaFree(dev_odata);
-    cudaFree(dev_bools);
-    cudaFree(dev_indices);
-
-    return indices[n - 1] + bools[n - 1];
+    cudaFree(dev_blockSums);
 }
-}  // namespace Shared
-}  // namespace StreamCompaction
+
+/************************************************************************************************ */
