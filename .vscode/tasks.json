@@ -23,7 +23,7 @@
             "label": "CUDA Make Release Build & Run",
             "type": "shell",
             "command": "make",
-            "args": ["build", "MODE=Release", "Release"],
+            "args": ["Release"],
             "group": {
                 "kind": "build",
             },

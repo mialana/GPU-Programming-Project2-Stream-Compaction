@@ -2,7 +2,6 @@
 #include <cuda_runtime.h>
 #include "common.h"
 #include "shared.h"
-#include "efficient.h"
 
 using StreamCompaction::Common::PerformanceTimer;
 
@@ -139,12 +138,22 @@ void StreamCompaction::Shared::scan(
     kernel_scanIntraBlockShared<<<numBlocks, blockSize, _offset(blockSpan) * sizeof(int)>>>(
         paddedN, dev_idata, dev_odata, dev_blockSums);
 
-    // use Efficient to scan blockSums
-    StreamCompaction::Efficient::scan(numBlocks, dev_blockSums, blockSize);
+    if (numBlocks > 1)
+    {
+        // Allocate temporary buffer for recursive scan of block sums
+        int* dev_newOData;
+        cudaMalloc((void**)&dev_newOData, sizeof(int) * numBlocks);
+        checkCUDAError("CUDA malloc for recursive block sums failed.");
 
-    cudaDeviceSynchronize();
+        // Recursively scan the block sums
+        scan(numBlocks, dev_blockSums, dev_newOData, dev_blockSums, blockSize);
 
-    kernel_addBlockSums<<<divup(n, blockSpan), blockSpan, blockSpan>>>(n, dev_odata, dev_blockSums);
+        // Add the recursively scanned block sums to the output
+        kernel_addBlockSums<<<numBlocks, blockSpan>>>(paddedN, dev_odata, dev_newOData);
+
+        // Free the temporary buffer
+        cudaFree(dev_newOData);
+    }
 }
 
 /**
