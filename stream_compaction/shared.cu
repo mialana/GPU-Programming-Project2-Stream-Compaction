@@ -2,6 +2,7 @@
 #include <cuda_runtime.h>
 #include "common.h"
 #include "shared.h"
+#include "efficient.h"
 
 using StreamCompaction::Common::PerformanceTimer;
 
@@ -11,10 +12,10 @@ PerformanceTimer& StreamCompaction::Shared::timer()
     return timer;
 }
 
-__global__ void kernel_efficientScanShared(const unsigned long long paddedN,
-                                           const int* idata,
-                                           int* odata,
-                                           int* blockSums)
+__global__ void kernel_scanIntraBlockShared(const unsigned long long paddedN,
+                                            const int* idata,
+                                            int* odata,
+                                            int* blockSums)
 {
     extern __shared__ int mat[];
 
@@ -25,7 +26,7 @@ __global__ void kernel_efficientScanShared(const unsigned long long paddedN,
     unsigned long long blockOffset = (blockIdx.x * blockDim.x) * 2;
     int threadOffset = 2 * tid;  // first index this thread is responsible for
 
-    int globalThreadIdx = blockOffset + threadOffset;
+    unsigned long long globalThreadIdx = blockOffset + threadOffset;
 
     // global memory is read from in coalesced fashion
     // ensure some threads do not return early without zero-padding the shared matrix
@@ -91,19 +92,52 @@ __global__ void kernel_efficientScanShared(const unsigned long long paddedN,
     }
 }
 
+__global__ void kernel_addBlockSums(int n, int* dev_data, const int* dev_blockSums)
+{
+    __shared__ int blockOffset;
+
+    if (threadIdx.x == 0)
+    {
+        blockOffset = dev_blockSums[blockIdx.x];
+    }
+
+    __syncthreads();
+
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (index >= n)
+    {  // should be safe to return now
+        return;
+    }
+
+    dev_data[index] += blockOffset;
+}
+
 /*
     the inner operation of scan without timers and allocation.
     note: dev_scan should be pre-allocated to the padded power of two size
 */
 void StreamCompaction::Shared::scan(
-    int n, int* dev_idata, int* dev_odata, int* dev_blockSums, const int blockSize)
+    int n, const int* dev_idata, int* dev_odata, int* dev_blockSums, const int blockSize)
 {
-    // unsigned long long numLayers = ilog2ceil(n);
-    int numLayers = ilog2ceil(n);
-    unsigned long long paddedN = 1 << numLayers;  // pad to nearest power of 2
+    unsigned long long paddedN = 1 << ilog2ceil(n);  // pad to nearest power of 2
 
-    kernel_efficientScanShared<<<divup(paddedN, 2 * blockSize), blockSize, blockSize * 2 * sizeof(int)>>>(
-        paddedN, dev_idata, dev_odata, dev_blockSums);
+    const int blockSpan = blockSize * 2;
+    // perform scan on the block level
+    int numBlocks = divup(paddedN, blockSpan);
+
+    // numBlocks, numThreads, shared mem size
+    kernel_scanIntraBlockShared<<<numBlocks, blockSize, blockSpan * sizeof(int)>>>(paddedN,
+                                                                                       dev_idata,
+                                                                                       dev_odata,
+                                                                                       dev_blockSums);
+
+    // use Efficient to scan blockSums
+    StreamCompaction::Efficient::scan(numBlocks, dev_blockSums, blockSize);
+
+    cudaDeviceSynchronize();
+
+    kernel_addBlockSums<<<divup(n, blockSpan), blockSpan, blockSpan>>>(n, dev_odata, dev_blockSums);
 }
 
 /**
@@ -114,7 +148,7 @@ void StreamCompaction::Shared::scanWrapper(int n, int* odata, const int* idata)
     int numLayers = ilog2ceil(n);
     unsigned long long paddedN = 1 << ilog2ceil(n);
 
-    int totalBlocks = divup(paddedN, BLOCK_SIZE);
+    int totalBlocks = divup(paddedN, 2 * BLOCK_SIZE);
 
     // create two device arrays
     int* dev_idata;

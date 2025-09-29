@@ -8,7 +8,7 @@ namespace Efficient
 {
 StreamCompaction::Common::PerformanceTimer& timer();
 
-void scan(int n, int* dev_scan);
+void scan(int n, int* dev_scan, const int blockSize);
 
 void scanWrapper(int n, int* odata, const int* idata);
 

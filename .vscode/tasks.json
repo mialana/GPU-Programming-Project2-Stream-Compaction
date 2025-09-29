@@ -18,6 +18,23 @@
                 "echo": true,
                 "focus": false
             }
+        },
+        {
+            "label": "CUDA Make Release Build & Run",
+            "type": "shell",
+            "command": "make",
+            "args": ["build", "MODE=Release", "Release"],
+            "group": {
+                "kind": "build",
+            },
+            "problemMatcher": ["$nvcc"],
+            "presentation": {
+                "panel": "dedicated",
+                "showReuseMessage": true,
+                "clear": false,
+                "echo": true,
+                "focus": false
+            }
         }
     ]
 }

@@ -116,7 +116,7 @@ void StreamCompaction::Radix::sort(
         _split<<<blocks, blockSize>>>(n, dev_data[current], dev_scan, tgtBit);
 
         // Perform scan on the split results
-        Efficient::scan(n, dev_scan);
+        Efficient::scan(n, dev_scan, blockSize);
 
         // Scatter data based on the split results
         _computeScatterIndices<<<blocks, blockSize>>>(n,
@@ -172,7 +172,7 @@ void StreamCompaction::Radix::sortByKey(int n,
         _split<<<blocks, blockSize>>>(n, dev_keys[current], dev_scan, tgtBit);
 
         // Perform scan on the split results
-        Efficient::scan(n, dev_scan);
+        Efficient::scan(n, dev_scan, blockSize);
 
         // Scatter keys and rearrange objects based on the sorted keys
         _computeScatterIndices<<<blocks, blockSize>>>(n,

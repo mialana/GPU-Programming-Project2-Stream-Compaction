@@ -3,13 +3,9 @@
 #include "common.h"
 #include "efficient.h"
 
-namespace StreamCompaction
-{
-namespace Efficient
-{
 using StreamCompaction::Common::PerformanceTimer;
 
-PerformanceTimer& timer()
+PerformanceTimer& StreamCompaction::Efficient::timer()
 {
     static PerformanceTimer timer;
     return timer;
@@ -44,7 +40,7 @@ __global__ void kernel_efficientUpSweep(const unsigned long long paddedN,
 
 __global__ void kernel_efficientDownSweep(const unsigned long long paddedN,
                                           const int STRIDE,
-                                          const int nextSTRIDE, // nextStride == (stride / 2)
+                                          const int nextSTRIDE,  // nextStride == (stride / 2)
                                           int* scan)
 {
     int strideIdx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -61,19 +57,19 @@ __global__ void kernel_efficientDownSweep(const unsigned long long paddedN,
 
     // leftChild and rightChild are nextSTRIDE indices apart
     unsigned long long leftChildIdx = strideStart + nextSTRIDE - 1;
-    int leftChild = scan[leftChildIdx]; // does not depend on first memory read
+    int leftChild = scan[leftChildIdx];  // does not depend on first memory read
 
     // give left child right child's value
     // its value has not changed since the end of upsweep
     // it has it easier than right child.
     // on this update it now has accumulated vals of all strides of size nextSTRIDE, besides its own
-    scan[leftChildIdx] = rightChild; // depends on first read, but not second
+    scan[leftChildIdx] = rightChild;  // depends on first read, but not second
 
     // right child currently contains accumulated vals of all strides of size STRIDE besodes its own
     // adding the left child, which only contains values of one stride of size nextSTRIDE
     // means that right child now also has accumulated vals of all strides of size nextSTRIDE
     // besides its own (same status as leftChild)
-    scan[rightChildIdx] = rightChild + leftChild; // memory writes do not depend on each other
+    scan[rightChildIdx] = rightChild + leftChild;  // memory writes do not depend on each other
 
     // summary: at each layer, the updated elements get the value of all strides of size nextSTRIDE
     // besides its own.
@@ -84,7 +80,7 @@ __global__ void kernel_efficientDownSweep(const unsigned long long paddedN,
     the inner operation of scan without timers and allocation.
     note: dev_scan should be pre-allocated to the padded power of two size
 */
-void scan(int n, int* dev_scan)
+void StreamCompaction::Efficient::scan(int n, int* dev_scan, const int blockSize)
 {
     // unsigned long long numLayers = ilog2ceil(n);
     int numLayers = ilog2ceil(n);
@@ -128,7 +124,7 @@ void scan(int n, int* dev_scan)
 /**
  * Performs prefix-sum (aka scan) on idata, storing the result into odata.
  */
-void scanWrapper(int n, int* odata, const int* idata)
+void StreamCompaction::Efficient::scanWrapper(int n, int* odata, const int* idata)
 {
     unsigned long long numLayers = ilog2ceil(n);
     unsigned long long paddedN = 1 << ilog2ceil(n);
@@ -151,7 +147,7 @@ void scanWrapper(int n, int* odata, const int* idata)
         usingTimer = true;
     }
 
-    scan(n, dev_scan);
+    scan(n, dev_scan, BLOCK_SIZE);
 
     if (usingTimer)
     {
@@ -172,7 +168,7 @@ void scanWrapper(int n, int* odata, const int* idata)
  * @param idata  The array of elements to compact.
  * @returns      The number of elements remaining after compaction.
  */
-int compact(int n, int* odata, const int* idata)
+int StreamCompaction::Efficient::compact(int n, int* odata, const int* idata)
 {
     // TODO: these arrays are unnecessary. will optimize soon.
 
@@ -205,7 +201,7 @@ int compact(int n, int* odata, const int* idata)
     int* indices = new int[n];  // create cpu side indices array
     int* bools = new int[n];
 
-    timer().startGpuTimer();
+    StreamCompaction::Efficient::timer().startGpuTimer();
 
     int blocks = divup(n, BLOCK_SIZE);
 
@@ -222,7 +218,7 @@ int compact(int n, int* odata, const int* idata)
 
     Common::kernScatter<<<blocks, BLOCK_SIZE>>>(n, dev_odata, dev_idata, dev_bools, dev_indices);
 
-    timer().endGpuTimer();
+    StreamCompaction::Efficient::timer().endGpuTimer();
 
     cudaMemcpy(odata, dev_odata, sizeof(int) * n, cudaMemcpyDeviceToHost);
 
@@ -233,5 +229,3 @@ int compact(int n, int* odata, const int* idata)
 
     return indices[n - 1] + bools[n - 1];
 }
-}  // namespace Efficient
-}  // namespace StreamCompaction
