@@ -18,7 +18,7 @@
 // use during development with `#if !SKIP_UNIMPLEMENTED` preprocessor at desired skip point
 #define SKIP_UNIMPLEMENTED 1
 
-const int SIZE = 1 << 28;   // feel free to change the size of array
+const int SIZE = 1 << 24;   // feel free to change the size of array
 const int NPOT = SIZE - 3;  // Non-Power-Of-Two
 
 int* a = new int[SIZE];
@@ -220,6 +220,32 @@ void doRadixSortTests()
     printArray(SIZE, c, true);
 
     printCmpResult(SIZE, b, c);
+
+    zeroArray(SIZE, b);
+    zeroArray(SIZE, c);
+    zeroArray(SIZE, d);
+    zeroArray(SIZE, e);
+
+    printDesc("THRUST radix sort by key, power-of-two");
+    StreamCompaction::Thrust::radixSortByKey(SIZE, b, c, a, values);
+    printElapsedTime(StreamCompaction::Thrust::timer().getGpuElapsedTimeForPreviousOperation(),
+                     "(std::chrono Measured)");
+    printArray(SIZE, b, true);
+    printArray(SIZE, c, true);
+
+    printDesc("custom radix sort by key, power-of-two");
+    StreamCompaction::Radix::sortByKeyWrapper(SIZE, d, a, e, values, 6, BLOCK_SIZE);
+
+    printElapsedTime(StreamCompaction::Radix::timer().getGpuElapsedTimeForPreviousOperation(),
+                     "(std::chrono Measured)");
+    printArray(SIZE, d, true);
+    printArray(SIZE, e, true);
+
+    printDesc("Sorted keys array comparison");
+    printCmpResult(SIZE, b, d);
+
+    printDesc("Sorted values array comparison");
+    printCmpResult(SIZE, c, e);
 }
 
 void doStreamCompactionTests()
