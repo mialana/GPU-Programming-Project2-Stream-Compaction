@@ -88,5 +88,34 @@ void radixSortByKey(int n, int* out_keys, int* out_values, const int* in_keys, c
     thrust::copy(d_keys.begin(), d_keys.end(), out_keys);
     thrust::copy(d_values.begin(), d_values.end(), out_values);
 }
+
+/**
+ * Stream compaction by key using Thrust.
+ * Given n elements in in_keys and in_values, copies each (key,value) pair
+ * for which the key is nonzero into out_keys and out_values.
+ * Returns the number of surviving elements.
+ */
+int compactByKey(int n, int* out_keys, float* out_values, const int* in_keys, const float* in_values)
+{
+    // inputs on device
+    thrust::device_vector<int> d_keys(in_keys, in_keys + n);
+    thrust::device_vector<float> d_vals(in_values, in_values + n);
+
+    auto zipped_in = thrust::make_zip_iterator(thrust::make_tuple(d_keys.begin(), d_vals.begin()));
+    auto zipped_end = zipped_in + n;
+
+    // wrap raw device pointers as device_ptr
+    auto d_out_keys = thrust::device_pointer_cast(out_keys);
+    auto d_out_values = thrust::device_pointer_cast(out_values);
+    auto zipped_out = thrust::make_zip_iterator(thrust::make_tuple(d_out_keys, d_out_values));
+
+    // either rely on deduction now that iterators are device, or pass policy explicitly:
+    // auto new_end = thrust::copy_if(thrust::device, zipped_in, zipped_end, d_keys.begin(),
+    // zipped_out, IsNonZero{});
+    auto new_end = thrust::copy_if(zipped_in, zipped_end, d_keys.begin(), zipped_out, IsNonZero{});
+
+    return static_cast<int>(new_end - zipped_out);
+}
+
 }  // namespace Thrust
 }  // namespace StreamCompaction

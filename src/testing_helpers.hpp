@@ -66,7 +66,7 @@ inline void genArray(int n, T* a, int maxval, float offset)
 
     for (int i = 0; i < n; i++)
     {
-        a[i] = rand() % maxval;
+        a[i] = (T)(rand() % maxval);
     }
 }
 
@@ -97,7 +97,13 @@ inline void printArray(int n, T* a, bool abridged = false)
             i = n - 2;
             printf("... ");
         }
-        printf("%3d ", a[i]);
+        if constexpr (std::is_integral_v<T>)
+        {
+            printf("%3d ", static_cast<int>(a[i]));
+        } else if constexpr (std::is_floating_point_v<T>)
+        {
+            printf("%3.1f ", static_cast<double>(a[i]));
+        }
     }
     printf("] - count: ");
     printf("%d\n", n);

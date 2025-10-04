@@ -18,7 +18,7 @@
 // use during development with `#if !SKIP_UNIMPLEMENTED` preprocessor at desired skip point
 #define SKIP_UNIMPLEMENTED 1
 
-const int SIZE = 1 << 24;   // feel free to change the size of array
+const int SIZE = 1 << 28;   // feel free to change the size of array
 const int NPOT = SIZE - 3;  // Non-Power-Of-Two
 
 int* a = new int[SIZE];
@@ -283,6 +283,7 @@ void doStreamCompactionTests()
     printArray(count, c, true);
     printCmpLenResult(count, expectedNPOT, b, c);
 
+#if !SKIP_UNIMPLEMENTED
     zeroArray(SIZE, c);
     printDesc("cpu compact with scan");
     count = StreamCompaction::CPU::compactWithScan(SIZE, c, a);
@@ -298,22 +299,80 @@ void doStreamCompactionTests()
                      "(std::chrono Measured)");
     printArray(count, c, true);
     printCmpLenResult(count, expectedNPOT, b, c);
+#endif
 
     zeroArray(SIZE, c);
-    printDesc("work-efficient compact, power-of-two");
-    count = StreamCompaction::Efficient::compact(SIZE, c, a);
-    printElapsedTime(StreamCompaction::Efficient::timer().getGpuElapsedTimeForPreviousOperation(),
+    printDesc("work-efficient shared compact, power-of-two");
+    count = StreamCompaction::Shared::compactWrapper(SIZE, c, a);
+    printElapsedTime(StreamCompaction::Shared::timer().getGpuElapsedTimeForPreviousOperation(),
                      "(CUDA Measured)");
-    printArray(count, c, true);
+    printArray(expectedCount, c, true);
     printCmpLenResult(count, expectedCount, b, c);
 
     zeroArray(SIZE, c);
-    printDesc("work-efficient compact, non-power-of-two");
-    count = StreamCompaction::Efficient::compact(NPOT, c, a);
-    printElapsedTime(StreamCompaction::Efficient::timer().getGpuElapsedTimeForPreviousOperation(),
+    printDesc("work-efficient shared compact, non-power-of-two");
+    count = StreamCompaction::Shared::compactWrapper(NPOT, c, a);
+    printElapsedTime(StreamCompaction::Shared::timer().getGpuElapsedTimeForPreviousOperation(),
                      "(CUDA Measured)");
     printArray(count, c, true);
     printCmpLenResult(count, expectedNPOT, b, c);
+}
+
+void doCompactByKeyTest()
+{
+    printf("\n");
+    printf("*********************************************\n");
+    printf("** STREAM COMPACTION BY KEY TEST (float) **\n");
+    printf("*********************************************\n");
+
+    float* flt_values = new float[SIZE];
+
+    printDesc("a array (same as before, input)");
+    printArray(SIZE, a, true);
+
+    printDesc("flt_values array (input)");
+    genArray(SIZE, flt_values, 5, 2000);
+    printArray(SIZE, flt_values, true);
+
+    // Allocate host arrays for output (results).
+    float* out_flt_values_thrust = new float[SIZE];
+    float* out_flt_values_custom = new float[SIZE];
+
+    zeroArray(SIZE, b);
+    printDesc("thrust compact by key");
+
+    int expectedCount = StreamCompaction::Thrust::compactByKey(SIZE,
+                                                               b,
+                                                               out_flt_values_thrust,
+                                                               a,
+                                                               flt_values);
+
+    printElapsedTime(StreamCompaction::Thrust::timer().getGpuElapsedTimeForPreviousOperation(),
+                     "(CUDA Measured)");
+    printArray<int>(expectedCount, b, true);
+    printArray<float>(expectedCount, out_flt_values_thrust, true);
+
+    zeroArray(SIZE, c);
+    printDesc("custom compact by key");
+
+    int count = StreamCompaction::Shared::compactByKeyWrapper<float>(SIZE,
+                                                                     out_flt_values_custom,
+                                                                     c,
+                                                                     flt_values,
+                                                                     a);
+
+    printElapsedTime(StreamCompaction::Shared::timer().getGpuElapsedTimeForPreviousOperation(),
+                     "(CUDA Measured)");
+    printArray<int>(count, c, true);
+    printArray<float>(count, out_flt_values_custom, true);
+
+    printDesc("keys comparison");
+    printCmpLenResult(count, expectedCount, b, c);
+    printDesc("values comparison");
+    printCmpLenResult(count, expectedCount, out_flt_values_thrust, out_flt_values_custom);
+
+    delete[] out_flt_values_thrust;
+    delete[] out_flt_values_custom;
 }
 
 int main()
@@ -338,11 +397,13 @@ int main()
 
     doScanTests();
 
-    // doConsecutiveTests();
+    doConsecutiveTests();
 
     doRadixSortTests();
 
-    // doStreamCompactionTests();
+    doStreamCompactionTests();
+
+    doCompactByKeyTest();
 
 #if defined(_WIN32) || defined(_WIN64)  // errors out on linux
     system("pause");                    // stop Win32 console from closing on exit
@@ -353,4 +414,5 @@ int main()
     delete[] c;
     delete[] consecutive;
     delete[] consecutiveOut;
+    cudaDeviceReset();
 }

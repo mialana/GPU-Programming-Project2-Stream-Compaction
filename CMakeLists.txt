@@ -34,7 +34,7 @@ set(headers
     )
 
 set(sources
-    "src/main.cpp"
+    "src/main.cu"
     )
 
 list(SORT headers)
