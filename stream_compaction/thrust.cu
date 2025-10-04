@@ -3,6 +3,9 @@
 #include <thrust/detail/vector_base.h>
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
+#include <thrust/remove.h>
+#include <thrust/copy.h>
+#include <thrust/tuple.h>
 #include <thrust/scan.h>
 #include <thrust/sort.h>
 #include "common.h"
@@ -97,24 +100,31 @@ void radixSortByKey(int n, int* out_keys, int* out_values, const int* in_keys, c
  */
 int compactByKey(int n, int* out_keys, float* out_values, const int* in_keys, const float* in_values)
 {
-    // inputs on device
+    // Wrap raw input arrays into Thrust device vectors.
     thrust::device_vector<int> d_keys(in_keys, in_keys + n);
     thrust::device_vector<float> d_vals(in_values, in_values + n);
 
-    auto zipped_in = thrust::make_zip_iterator(thrust::make_tuple(d_keys.begin(), d_vals.begin()));
-    auto zipped_end = zipped_in + n;
+    // Create a zipped iterator over (key, value)
+    auto zipped_begin = thrust::make_zip_iterator(
+        thrust::make_tuple(d_keys.begin(), d_vals.begin()));
+    auto zipped_end = thrust::make_zip_iterator(thrust::make_tuple(d_keys.end(), d_vals.end()));
 
-    // wrap raw device pointers as device_ptr
-    auto d_out_keys = thrust::device_pointer_cast(out_keys);
-    auto d_out_values = thrust::device_pointer_cast(out_values);
-    auto zipped_out = thrust::make_zip_iterator(thrust::make_tuple(d_out_keys, d_out_values));
+    // Call remove_if: it shifts surviving elements to the front.
+    // Remove pairs if key == 0.
+    auto new_end = thrust::remove_if(zipped_begin,
+                                     zipped_end,
+                                     [] __device__(const thrust::tuple<int, float>& tup) {
+                                         return thrust::get<0>(tup) == 0;
+                                     });
 
-    // either rely on deduction now that iterators are device, or pass policy explicitly:
-    // auto new_end = thrust::copy_if(thrust::device, zipped_in, zipped_end, d_keys.begin(),
-    // zipped_out, IsNonZero{});
-    auto new_end = thrust::copy_if(zipped_in, zipped_end, d_keys.begin(), zipped_out, IsNonZero{});
+    // Compute the new count.
+    int count = new_end - zipped_begin;
 
-    return static_cast<int>(new_end - zipped_out);
+    // Copy the surviving keys and values back to host memory.
+    thrust::copy(d_keys.begin(), d_keys.begin() + count, out_keys);
+    thrust::copy(d_vals.begin(), d_vals.begin() + count, out_values);
+
+    return count;
 }
 
 }  // namespace Thrust
