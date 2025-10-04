@@ -10,30 +10,27 @@
                 "kind": "build",
                 "isDefault": true
             },
-            "problemMatcher": ["$nvcc"],
-            "presentation": {
-                "panel": "dedicated",
-                "showReuseMessage": true,
-                "clear": false,
-                "echo": true,
-                "focus": false
-            }
-        },
-        {
-            "label": "CUDA Make Release Build & Run",
-            "type": "shell",
-            "command": "make",
-            "args": ["Release"],
-            "group": {
-                "kind": "build",
+            "problemMatcher": {
+                "owner": "cpp",
+                "fileLocation": ["absolute"],
+                "pattern": {
+                    "regexp": "^([^\\s:]+)\\((\\d+)(?:,(\\d+))?\\): (error|warning|note|info): (.+)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                }
             },
-            "problemMatcher": ["$nvcc"],
             "presentation": {
                 "panel": "dedicated",
                 "showReuseMessage": true,
                 "clear": false,
                 "echo": true,
                 "focus": false
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
             }
         }
     ]
