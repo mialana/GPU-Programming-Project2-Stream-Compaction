@@ -11,7 +11,7 @@
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #define checkCUDAError(msg) checkCUDAErrorFn(msg, FILENAME, __LINE__)
 
-#define BLOCK_SIZE 16
+#define BLOCK_SIZE 128
 
 /**
  * Check for CUDA errors; print and exit if there was a problem.
@@ -33,6 +33,8 @@ inline int ilog2(int x)
     return lg;
 }
 
+// calculates smallest possible integer k such that 2^k >= x
+// subtracts x from 1 in the case that we already have a power of 2
 inline int ilog2ceil(int x)
 {
     return x == 1 ? 0 : ilog2(x - 1) + 1;
@@ -44,8 +46,25 @@ namespace Common
 {
 __global__ void kernMapToBoolean(int n, int* bools, const int* idata);
 
-__global__ void kernScatter(
-    int n, int* odata, const int* idata, const int* bools, const int* indices);
+/**
+ * Performs scatter on an array. That is, for each element in idata,
+ * if bools[idx] == 1, it copies idata[idx] to odata[indices[idx]].
+ */
+template<typename T>
+__global__ void kernScatter(int n, T* odata, const T* idata, const int* bools, const int* indices)
+{
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (index >= n)
+    {
+        return;
+    }
+
+    if (bools[index] == 1)
+    {
+        odata[indices[index]] = idata[index];
+    }
+}
 
 __global__ void kernel_inclusiveToExclusive(int n, int identity, const int* iData, int* oData);
 

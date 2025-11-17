@@ -1,8 +1,13 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include <thrust/detail/vector_base.h>
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
+#include <thrust/remove.h>
+#include <thrust/copy.h>
+#include <thrust/tuple.h>
 #include <thrust/scan.h>
+#include <thrust/sort.h>
 #include "common.h"
 #include "thrust.h"
 
@@ -11,6 +16,8 @@ namespace StreamCompaction
 namespace Thrust
 {
 using StreamCompaction::Common::PerformanceTimer;
+
+using thrust::host_vector;
 
 PerformanceTimer& timer()
 {
@@ -37,5 +44,88 @@ void scan(int n, int* odata, const int* idata)
     // copy result back to host
     thrust::copy(dev_odata.begin(), dev_odata.end(), odata);
 }
+
+void radixSort(int n, int* o_data, const int* i_data)
+{
+    thrust::device_vector<int> d_copy(i_data, i_data + n);
+
+    bool usingTimer = false;
+    if (!timer().gpu_timer_started)
+    {
+        timer().startGpuTimer();
+        usingTimer = true;
+    }
+
+    thrust::sort(d_copy.begin(), d_copy.end());
+
+    if (usingTimer)
+    {
+        timer().endGpuTimer();
+    }
+
+    thrust::copy(d_copy.begin(), d_copy.end(), o_data);
+}
+
+void radixSortByKey(int n, int* out_keys, int* out_values, const int* in_keys, const int* in_values)
+{
+    // Wrap raw pointers with Thrust device pointers
+    thrust::device_vector<int> d_keys(in_keys, in_keys + n);
+    thrust::device_vector<int> d_values(in_values, in_values + n);
+
+    bool usingTimer = false;
+    if (!timer().gpu_timer_started)
+    {
+        timer().startGpuTimer();
+        usingTimer = true;
+    }
+
+    // Sort keys and reorder values accordingly
+    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_values.begin());
+
+    if (usingTimer)
+    {
+        timer().endGpuTimer();
+    }
+
+    // Copy sorted keys and values back to host
+    thrust::copy(d_keys.begin(), d_keys.end(), out_keys);
+    thrust::copy(d_values.begin(), d_values.end(), out_values);
+}
+
+/**
+ * Stream compaction by key using Thrust.
+ * Given n elements in in_keys and in_values, copies each (key,value) pair
+ * for which the key is nonzero into out_keys and out_values.
+ * Returns the number of surviving elements.
+ */
+int compactByKey(int n, int* out_keys, float* out_values, const int* in_keys, const float* in_values)
+{
+    // Wrap raw input arrays into Thrust device vectors.
+    thrust::device_vector<int> d_keys(in_keys, in_keys + n);
+    thrust::device_vector<float> d_vals(in_values, in_values + n);
+
+    // Create a zipped iterator over (key, value)
+    auto zipped_begin = thrust::make_zip_iterator(
+        thrust::make_tuple(d_keys.begin(), d_vals.begin()));
+    auto zipped_end = thrust::make_zip_iterator(thrust::make_tuple(d_keys.end(), d_vals.end()));
+
+    // Call remove_if: it shifts surviving elements to the front.
+    // Remove pairs if key == 0.
+    auto new_end = thrust::remove_if(zipped_begin,
+                                     zipped_end,
+                                     [] __device__(const thrust::tuple<int, float>& tup) {
+                                         return thrust::get<0>(tup) == 0;
+                                     });
+
+    // Compute the new count.
+    int count = new_end - zipped_begin;
+
+    // Copy the surviving keys and values back to host memory.
+    thrust::copy(d_keys.begin(), d_keys.begin() + count, out_keys);
+    thrust::copy(d_vals.begin(), d_vals.begin() + count, out_values);
+
+    return count;
+}
+
 }  // namespace Thrust
 }  // namespace StreamCompaction
